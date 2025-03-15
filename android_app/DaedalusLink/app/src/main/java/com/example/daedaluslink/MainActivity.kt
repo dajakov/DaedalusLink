@@ -6,31 +6,39 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import androidx.navigation.compose.*
 
@@ -127,6 +135,12 @@ fun LandingScreen(navController: NavController) {
         IconItem.CustomIcon(R.drawable.r2d2),
         IconItem.MaterialIcon(Icons.Filled.Settings),
     )
+    // Text options based on selected icon
+    val texts = listOf(
+        "Add...",
+        "R2D2",
+        "Settings"
+    )
 
     LaunchedEffect(selectedIndex.intValue) {
         val targetOffset = with(density) {
@@ -137,6 +151,20 @@ fun LandingScreen(navController: NavController) {
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth() // Take up the full width
+                .padding(top = 16.dp) // Padding from the top
+        ) {
+            Text(
+                text = texts[selectedIndex.intValue],  // Dynamically change text based on selected icon
+                style = MaterialTheme.typography.headlineMedium,
+                modifier = Modifier
+                    .align(Alignment.Center), // Center text horizontally and vertically within Box
+                color = Color.Black
+            )
+        }
+
         Row(modifier = Modifier
             .horizontalScroll(scrollState)
             .padding(vertical = 16.dp)
@@ -172,13 +200,141 @@ fun LandingScreen(navController: NavController) {
             }
         }
 
+        if (selectedIndex.intValue == 0 || selectedIndex.intValue == icons.size - 1) {
+            Box(
+                modifier = Modifier.fillMaxWidth() // Ensure it takes full width
+            ) {
+                Button(
+                    onClick = { /* Handle button click */ },
+                    modifier = Modifier
+                        .padding(15.dp)
+                        .align(Alignment.Center) // Center the button horizontally
+                        .fillMaxWidth(), // Button width set to 80% of the screen width
+                    colors = ButtonDefaults.buttonColors(Color.Black), // Black button color
+                    shape = RectangleShape // Rectangular shape
+                ) {
+                    if (selectedIndex.intValue == 0){
+                        Text(
+                            "Add a new Robot",
+                            color = Color.White, // Text color set to white to contrast the black button
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    } else {
+                        Text(
+                            "App settings",
+                            color = Color.White, // Text color set to white to contrast the black button
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
+            }
+        } else {
+            // Declaring a boolean value to store the expanded state of the TextField
+            var mExpanded by remember { mutableStateOf(false) }
+
+            // Create a list of cities
+            val mVersionNumbers = listOf("Tatooine", "Coruscant", "Hoth")
+
+            // Create a string value to store the selected city
+            var mSelectedText by remember { mutableStateOf(mVersionNumbers.last()) } // Default to the last element
+
+            var mTextFieldSize by remember { mutableStateOf(Size.Zero) }
+
+            // Up Icon when expanded and down icon when collapsed
+            val icon = if (mExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown
+
+            Column(Modifier.padding(15.dp)) {
+                // Label for the dropdown
+                Text(
+                    text = "Select config",
+                    modifier = Modifier.padding(bottom = 5.dp) // Space between label and dropdown
+                )
+
+                // Visual Box around dropdown and the selected value
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, Color.Gray, RoundedCornerShape(8.dp)) // Box with border and rounded corners
+                        .clickable { mExpanded = !mExpanded } // Toggle dropdown when clicked
+                        .padding(16.dp) // Padding inside the box
+                ) {
+                    // Display the currently selected value
+                    Text(
+                        text = mSelectedText,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.Black
+                    )
+
+                    // Icon to indicate dropdown (arrow)
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = "Dropdown icon",
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .padding(5.dp)
+                    )
+                }
+
+                // Dropdown menu
+                DropdownMenu(
+                    expanded = mExpanded,
+                    onDismissRequest = { mExpanded = false }, // Close menu when clicked outside
+                    modifier = Modifier
+                        .width(200.dp) // Set width of dropdown menu
+                        .padding(top = 8.dp) // Add space between box and dropdown
+                ) {
+                    mVersionNumbers.forEach { label ->
+                        DropdownMenuItem(
+                            onClick = {
+                                mSelectedText = label
+                                mExpanded = false // Close dropdown after selection
+                            },
+                            text = { Text(text = label) }
+                        )
+                    }
+                }
+            }
+            Box(
+                modifier = Modifier.fillMaxWidth() // Ensure it takes full width
+            ) {
+                Button(
+                    onClick = { /* Handle button click */ },
+                    modifier = Modifier
+                        .padding(0.dp)
+                        .align(Alignment.Center) // Center the button horizontally
+                        .fillMaxWidth(0.9f), // Button width set to 80% of the screen width
+                    colors = ButtonDefaults.buttonColors(Color.Black), // Black button color
+                    shape = RectangleShape // Rectangular shape
+                ) {
+                    Text(
+                        "Add a new config",
+                        color = Color.White, // Text color set to white to contrast the black button
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+        }
+
+        var canvasHeight by remember { mutableFloatStateOf(0f) }
         Canvas(modifier = Modifier
-            .fillMaxSize()
+            .weight(1f)
+            .fillMaxWidth()
+            .onGloballyPositioned { coordinates ->
+                // Get the size of the canvas (height in this case)
+                canvasHeight = coordinates.size.height.toFloat()
+            }
             .clickable { navController.navigate("home") }) {
 
+            // Calculate the bottom position for the arc and rect
+            val bottomOffset = canvasHeight - diameter // Bottom of the canvas
+
+            // Arc: Position the y-coordinate relative to the bottom
             drawArc(
                 color = Color.Black,
-                topLeft = Offset(screenWidthPx * 0.5f - diameter / 2, screenHeightPx * 0.5f - diameter / 2),
+                topLeft = Offset(
+                    screenWidthPx * 0.5f - diameter / 2,  // Center horizontally
+                    bottomOffset - diameter * 0.3f        // Position vertically relative to the bottom
+                ),
                 size = Size(diameter, diameter),
                 startAngle = 300f,
                 sweepAngle = 300f,
@@ -186,15 +342,34 @@ fun LandingScreen(navController: NavController) {
                 useCenter = false
             )
 
+            // Rect: Position the y-coordinate relative to the bottom
             drawRect(
                 color = Color.Black,
-                topLeft = Offset(screenWidthPx * 0.5f - 15f, screenHeightPx * 0.5f - diameter * 0.7f),
-                size = Size(30f, diameter * 0.7f),
+                topLeft = Offset(
+                    screenWidthPx * 0.5f - 15f,  // Center horizontally
+                    bottomOffset - diameter * 0.5f // Position vertically relative to the bottom
+                ),
+                size = Size(30f, diameter * 0.7f)
+            )
+        }
+
+        // Version Text Box at the bottom
+        Box(
+            modifier = Modifier
+                .height(40.dp)  // Fixed height for the version text container
+                .fillMaxWidth()
+                .padding(bottom = 16.dp)
+        ) {
+            Text(
+                text = "1.0.0-dev", // Dynamic version text can go here
+                color = Color.Gray,  // Grayed-out text
+                fontSize = 12.sp,     // Small font size
+                modifier = Modifier
+                    .align(Alignment.Center)  // Align to the center of the Box
             )
         }
     }
 }
-
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
