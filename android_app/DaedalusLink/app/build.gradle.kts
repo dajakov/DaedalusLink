@@ -59,7 +59,8 @@ dependencies {
     implementation(libs.androidx.fragment.ktx)
     implementation(libs.coil.compose)
     implementation (libs.androidx.datastore.preferences)
-    implementation(libs.androidx.room.runtime.v261) // Room runtime library
+    implementation(libs.androidx.room.runtime.v261)
+    implementation(libs.androidx.recyclerview) // Room runtime library
     ksp(libs.androidx.room.compiler.v261) // Room compiler with KSP for annotation processing
     implementation(libs.androidx.room.ktx.v261) // Room KTX for Kotlin extension functions
     testImplementation(libs.junit)

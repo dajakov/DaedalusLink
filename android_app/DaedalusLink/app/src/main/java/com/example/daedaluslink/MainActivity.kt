@@ -1,11 +1,10 @@
 package com.example.daedaluslink
 
 import android.annotation.SuppressLint
-import android.app.Application
-import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.viewModels
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
@@ -46,43 +45,29 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import androidx.navigation.compose.*
 import androidx.compose.material3.TextFieldDefaults
-import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.viewModelScope
-import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.room.Dao
-import androidx.room.Database
-import androidx.room.Delete
-import androidx.room.Entity
-import androidx.room.Insert
-import androidx.room.OnConflictStrategy
-import androidx.room.PrimaryKey
-import androidx.room.Query
-import androidx.room.Room
-import androidx.room.RoomDatabase
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
-    @SuppressLint("UnusedMaterialScaffoldPaddingParameter",
-        "UnusedMaterial3ScaffoldPaddingParameter"
-    )
+
+    // Initialize ViewModel
+    private val connectConfigViewModel: ConnectConfigViewModel by viewModels()
+
+    @SuppressLint("UnusedMaterialScaffoldPaddingParameter", "UnusedMaterial3ScaffoldPaddingParameter")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        actionBar?.hide() // Why is this needed? From where does the action bar come from???
 
+        // Remove redundant super.onCreate
+        actionBar?.hide() // is not necessary if you're using Jetpack Compose
         setContent {
             val navController = rememberNavController()
 
             val currentDestination by navController.currentBackStackEntryAsState()
             val showBottomBar = currentDestination?.destination?.route != "landing" &&
-                                currentDestination?.destination?.route != "addConnectConfig"
+                    currentDestination?.destination?.route != "addConnectConfig"
 
             Scaffold(
                 bottomBar = {
                     if (showBottomBar) {
-                        NavigationBar (
-                            containerColor = Color.White
-                        ){
+                        NavigationBar(containerColor = Color.White) {
                             val items = listOf("control", "debug", "settings")
                             val icons = listOf(Icons.Default.PlayArrow, Icons.Default.Info, Icons.Default.Settings)
 
@@ -107,18 +92,19 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             ) {
-                val viewModel: ConnectConfigViewModel = viewModel()
+                // Use ViewModel directly from Compose using viewModel()
                 NavHost(navController, startDestination = "landing") {
                     composable("landing") { LandingScreen(navController) }
                     composable("control") { HomeScreen(navController) }
                     composable("debug") { DashboardScreen(navController) }
                     composable("settings") { NotificationScreen(navController) }
-                    composable("addConnectConfig") { AddConnectConfigScreen(navController, viewModel) }
+                    composable("addConnectConfig") { AddConnectConfigScreen(navController, connectConfigViewModel) }
                 }
             }
         }
     }
 }
+
 
 sealed class IconItem {
     data class MaterialIcon(val icon: ImageVector) : IconItem()
@@ -405,23 +391,6 @@ fun LandingScreen(navController: NavController) {
     }
 }
 
-class ConnectConfigViewModel(application: Application) : AndroidViewModel(application) {
-    private val dao = ConnectConfigDatabase.getDatabase(application).connectConfigDao()
-    val allConfigs: Flow<List<ConnectConfig>> = dao.getAllConfigs()
-
-    fun insertConfig(config: ConnectConfig) {
-        viewModelScope.launch {
-            dao.insertConfig(config)
-        }
-    }
-
-    fun deleteConfig(config: ConnectConfig) {
-        viewModelScope.launch {
-            dao.deleteConfig(config)
-        }
-    }
-}
-
 @Composable
 fun AddConnectConfigScreen(navController: NavController, viewModel: ConnectConfigViewModel) {
     var selectedOption by remember { mutableStateOf("WiFi") }
@@ -531,49 +500,6 @@ fun AddConnectConfigScreen(navController: NavController, viewModel: ConnectConfi
                         }
                     }
                 }
-            }
-        }
-    }
-}
-
-@Entity(tableName = "connect_config")
-data class ConnectConfig(
-    @PrimaryKey(autoGenerate = true) val id: Int = 0,
-    val connectionType: String,
-    val address: String,
-    val heartbeatFrequency: Int
-)
-
-@Dao
-interface ConnectConfigDao {
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertConfig(config: ConnectConfig)
-
-    @Query("SELECT * FROM connect_config")
-    fun getAllConfigs(): Flow<List<ConnectConfig>>
-
-    @Delete
-    suspend fun deleteConfig(config: ConnectConfig)
-}
-
-
-@Database(entities = [ConnectConfig::class], version = 1, exportSchema = false)
-abstract class ConnectConfigDatabase : RoomDatabase() {
-    abstract fun connectConfigDao(): ConnectConfigDao
-
-    companion object {
-        @Volatile
-        private var INSTANCE: ConnectConfigDatabase? = null
-
-        fun getDatabase(context: Context): ConnectConfigDatabase {
-            return INSTANCE ?: synchronized(this) {
-                val instance = Room.databaseBuilder(
-                    context.applicationContext,
-                    ConnectConfigDatabase::class.java,
-                    "connect_config_db"
-                ).build()
-                INSTANCE = instance
-                instance
             }
         }
     }
