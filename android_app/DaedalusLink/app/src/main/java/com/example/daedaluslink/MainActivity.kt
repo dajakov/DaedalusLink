@@ -12,6 +12,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -23,6 +24,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -45,6 +47,8 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import androidx.navigation.compose.*
 import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.ui.graphics.graphicsLayer
+import com.example.daedaluslink.ConnectConfigDatabase.Companion.resetDatabase
 
 class MainActivity : ComponentActivity() {
 
@@ -55,8 +59,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Remove redundant super.onCreate
-        actionBar?.hide() // is not necessary if you're using Jetpack Compose
+        resetDatabase(applicationContext) // TODO(remove for production) for development purposes only.
+
+        actionBar?.hide()
         setContent {
             val navController = rememberNavController()
 
@@ -105,10 +110,72 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+// icons for the user to choose from for the connect config
+val allIcons = listOf(
+    IconItem.MaterialIcon(Icons.Default.Info),
+    IconItem.MaterialIcon(Icons.Default.PlayArrow),
+    IconItem.CustomIcon(R.drawable.r2d2),
+    IconItem.CustomIcon(R.drawable.r2d2)
+    // Add more icons as needed
+)
 
 sealed class IconItem {
     data class MaterialIcon(val icon: ImageVector) : IconItem()
     data class CustomIcon(val resourceId: Int) : IconItem()  // Represents drawable resource ID
+}
+
+object IconMapper {
+
+    // Mapping from icon ID to IconItem
+    fun getIconById(iconId: String): IconItem {
+        return when (iconId) {
+            "info" -> IconItem.MaterialIcon(Icons.Default.Info) // Example of mapping an ID to a Material icon
+            "PlayArrow" -> IconItem.MaterialIcon(Icons.Default.PlayArrow) // Another example for MaterialIcon
+            "r2d2" -> IconItem.CustomIcon(R.drawable.r2d2) // Example of mapping an ID to a custom icon
+            "r2d22" -> IconItem.CustomIcon(R.drawable.r2d2) // Another example for custom icons
+            else -> IconItem.MaterialIcon(Icons.Default.Warning) // Default icon if the ID is unrecognized
+        }
+    }
+
+    // Mapping from IconItem to ID (store this ID in the database)
+    fun getIconId(iconItem: IconItem): String {
+        return when (iconItem) {
+            is IconItem.MaterialIcon -> when (iconItem.icon) {
+                Icons.Default.Info -> "info"
+                Icons.Default.PlayArrow -> "PlayArrow"
+                else -> "default" // Default if the icon doesn't match
+            }
+            is IconItem.CustomIcon -> when (iconItem.resourceId) {
+                R.drawable.r2d2 -> "r2d2"
+                R.drawable.r2d2 -> "r2d22"
+                else -> "default"
+            }
+        }
+    }
+}
+
+@Composable
+fun DisplayIcon(icon: IconItem, modifier: Modifier = Modifier) {
+    when (icon) {
+        is IconItem.MaterialIcon -> Icon(
+            icon.icon,
+            contentDescription = null,
+            modifier = modifier
+        )
+        is IconItem.CustomIcon -> {
+            // Use a Box to control the size of the custom icon
+            Box(
+                modifier = modifier
+                    .size(48.dp) // Set the size for custom icons
+            ) {
+                Image(
+                    painter = painterResource(id = icon.resourceId),
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize() // Ensures the image fills the Box
+                )
+            }
+        }
+    }
 }
 
 @Composable
@@ -393,9 +460,11 @@ fun LandingScreen(navController: NavController) {
 
 @Composable
 fun AddConnectConfigScreen(navController: NavController, viewModel: ConnectConfigViewModel) {
-    var selectedOption by remember { mutableStateOf("WiFi") }
+    var configName by remember { mutableStateOf("") }
+    var selectedOption by remember { mutableStateOf("WiFi") } // Default connection type
     var address by remember { mutableStateOf("") }
     var heartbeat by remember { mutableStateOf("") }
+    var selectedIcon by remember { mutableStateOf<IconItem>(IconItem.MaterialIcon(Icons.Default.Info)) } // Default icon
     val configs by viewModel.allConfigs.collectAsState(initial = emptyList())
 
     Scaffold(
@@ -407,6 +476,44 @@ fun AddConnectConfigScreen(navController: NavController, viewModel: ConnectConfi
                 .padding(paddingValues)
                 .padding(16.dp)
         ) {
+            // Config Name Input
+            OutlinedTextField(
+                value = configName,
+                onValueChange = { configName = it },
+                label = { Text("Configuration Name", color = Color.Gray) },
+                modifier = Modifier.fillMaxWidth(),
+                colors = TextFieldDefaults.colors(
+                    focusedIndicatorColor = Color.Black,
+                    unfocusedIndicatorColor = Color.Gray
+                )
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // LazyRow for selecting icons from the list
+            Text("Select an Icon:", fontWeight = FontWeight.Bold, color = Color.Black)
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                items(allIcons) { icon ->
+                    IconButton(
+                        onClick = { selectedIcon = icon },
+                        modifier = Modifier
+                            .size(48.dp)
+                            .then(
+                                if (selectedIcon == icon) Modifier
+                                    .graphicsLayer { alpha = 1f } // Selected icon is normal
+                                else Modifier
+                                    .graphicsLayer { alpha = 0.4f } // Non-selected icons are grayed out
+                            )
+                    ) {
+                        DisplayIcon(icon, modifier = Modifier.size(48.dp)) // Display the icon
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Connection type selection (Radio buttons for WiFi and Bluetooth)
             Text("Select Connection Type:", fontWeight = FontWeight.Bold, color = Color.Black)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 RadioButton(
@@ -423,8 +530,9 @@ fun AddConnectConfigScreen(navController: NavController, viewModel: ConnectConfi
                 )
                 Text("Bluetooth", color = Color.Black, modifier = Modifier.clickable { selectedOption = "Bluetooth" })
             }
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
+            // IP/MAC Address Input Field
             OutlinedTextField(
                 value = address,
                 onValueChange = { address = it },
@@ -437,6 +545,7 @@ fun AddConnectConfigScreen(navController: NavController, viewModel: ConnectConfi
             )
             Spacer(modifier = Modifier.height(16.dp))
 
+            // Heartbeat Frequency Input Field
             OutlinedTextField(
                 value = heartbeat,
                 onValueChange = { heartbeat = it },
@@ -450,36 +559,40 @@ fun AddConnectConfigScreen(navController: NavController, viewModel: ConnectConfi
             )
             Spacer(modifier = Modifier.height(16.dp))
 
-            Box(
-                modifier = Modifier.fillMaxWidth() // Ensure it takes full width
-            ) {
+            // Save Button
+            Box(modifier = Modifier.fillMaxWidth()) {
                 Button(
-                    onClick = { navController.navigate("landing")
+                    onClick = {
+                        val iconId = IconMapper.getIconId(selectedIcon) // Get the ID of the selected icon
                         val config = ConnectConfig(
+                            name = configName,
                             connectionType = selectedOption,
                             address = address,
-                            heartbeatFrequency = heartbeat.toIntOrNull() ?: 0
+                            heartbeatFrequency = heartbeat.toIntOrNull() ?: 0,
+                            iconId = iconId // Save the icon ID in the DB
                         )
-                        viewModel.insertConfig(config)},
+                        viewModel.insertConfig(config)
+                        navController.navigate("landing")
+                    },
                     modifier = Modifier
                         .padding(0.dp)
                         .align(Alignment.Center) // Center the button horizontally
                         .fillMaxWidth(), // Button width set to 80% of the screen width
                     colors = ButtonDefaults.buttonColors(Color.Black), // Black button color
-                    shape = RectangleShape // Rectangular shape
+                    shape = RectangleShape // Rectangular shape // Center the button horizontally
                 ) {
-                    Text(
-                        "Save new config",
-                        color = Color.White, // Text color set to white to contrast the black button
-                        style = MaterialTheme.typography.bodyMedium
-                    )
+                    Text("Save new config", color = Color.White,
+                    style = MaterialTheme.typography.bodyMedium)
                 }
             }
 
             Spacer(modifier = Modifier.height(24.dp))
             Text("Saved Configurations:", fontWeight = FontWeight.Bold, color = Color.Black)
+
+            // Display saved configurations with icons
             LazyColumn {
                 items(configs) { config ->
+                    val icon = IconMapper.getIconById(config.iconId) // Get the icon using the saved ID
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -487,6 +600,8 @@ fun AddConnectConfigScreen(navController: NavController, viewModel: ConnectConfi
                         colors = CardDefaults.cardColors(containerColor = Color.LightGray)
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
+                            Text("Name: ${config.name}", color = Color.Black) // Display config name
+                            DisplayIcon(icon, modifier = Modifier.size(48.dp)) // Display the icon
                             Text("Type: ${config.connectionType}", color = Color.Black)
                             Text("Address: ${config.address}", color = Color.Black)
                             Text("Heartbeat: ${config.heartbeatFrequency} Hz", color = Color.Black)
@@ -504,6 +619,7 @@ fun AddConnectConfigScreen(navController: NavController, viewModel: ConnectConfi
         }
     }
 }
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

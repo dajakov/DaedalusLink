@@ -24,5 +24,14 @@ abstract class ConnectConfigDatabase : RoomDatabase() {
                 instance
             }
         }
+
+        fun resetDatabase(context: Context) {
+            // Delete the old database
+            context.deleteDatabase("connect_config_db")
+
+            // Now Room will recreate the database with the new schema
+            INSTANCE = null // Clear the instance so that it will be recreated
+            getDatabase(context) // Recreate the database instance with the new schema
+        }
     }
 }
