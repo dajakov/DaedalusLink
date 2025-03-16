@@ -1,6 +1,8 @@
 package com.example.daedaluslink
 
 import android.annotation.SuppressLint
+import android.app.Application
+import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -8,18 +10,19 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -32,15 +35,32 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import androidx.navigation.compose.*
+import androidx.compose.material3.TextFieldDefaults
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.room.Dao
+import androidx.room.Database
+import androidx.room.Delete
+import androidx.room.Entity
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
+import androidx.room.PrimaryKey
+import androidx.room.Query
+import androidx.room.Room
+import androidx.room.RoomDatabase
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     @SuppressLint("UnusedMaterialScaffoldPaddingParameter",
@@ -54,17 +74,29 @@ class MainActivity : ComponentActivity() {
             val navController = rememberNavController()
 
             val currentDestination by navController.currentBackStackEntryAsState()
-            val showBottomBar = currentDestination?.destination?.route != "landing" // Hide on Landing
+            val showBottomBar = currentDestination?.destination?.route != "landing" &&
+                                currentDestination?.destination?.route != "addConnectConfig"
 
             Scaffold(
                 bottomBar = {
                     if (showBottomBar) {
-                        NavigationBar {
-                            val items = listOf("home", "dashboard", "notifications")
-                            val icons = listOf(Icons.Default.Home, Icons.AutoMirrored.Filled.List, Icons.Default.Notifications)
+                        NavigationBar (
+                            containerColor = Color.White
+                        ){
+                            val items = listOf("control", "debug", "settings")
+                            val icons = listOf(Icons.Default.PlayArrow, Icons.Default.Info, Icons.Default.Settings)
 
                             items.forEachIndexed { index, screen ->
                                 NavigationBarItem(
+                                    colors = NavigationBarItemColors(
+                                        selectedIconColor = Color.Black,
+                                        selectedIndicatorColor = Color.White,
+                                        selectedTextColor = Color.Black,
+                                        unselectedIconColor = Color.Gray,
+                                        unselectedTextColor = Color.Gray,
+                                        disabledIconColor = Color.Gray,
+                                        disabledTextColor = Color.Gray
+                                    ),
                                     icon = { Icon(icons[index], contentDescription = screen) },
                                     label = { Text(screen) },
                                     selected = navController.currentDestination?.route == screen,
@@ -75,11 +107,13 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             ) {
+                val viewModel: ConnectConfigViewModel = viewModel()
                 NavHost(navController, startDestination = "landing") {
                     composable("landing") { LandingScreen(navController) }
-                    composable("home") { HomeScreen(navController) }
-                    composable("dashboard") { DashboardScreen(navController) }
-                    composable("notifications") { NotificationScreen(navController) }
+                    composable("control") { HomeScreen(navController) }
+                    composable("debug") { DashboardScreen(navController) }
+                    composable("settings") { NotificationScreen(navController) }
+                    composable("addConnectConfig") { AddConnectConfigScreen(navController, viewModel) }
                 }
             }
         }
@@ -205,7 +239,7 @@ fun LandingScreen(navController: NavController) {
                 modifier = Modifier.fillMaxWidth() // Ensure it takes full width
             ) {
                 Button(
-                    onClick = { /* Handle button click */ },
+                    onClick = { navController.navigate("addConnectConfig") },
                     modifier = Modifier
                         .padding(15.dp)
                         .align(Alignment.Center) // Center the button horizontally
@@ -298,7 +332,7 @@ fun LandingScreen(navController: NavController) {
                 modifier = Modifier.fillMaxWidth() // Ensure it takes full width
             ) {
                 Button(
-                    onClick = { /* Handle button click */ },
+                    onClick = { navController.navigate("addConnectConfig") },
                     modifier = Modifier
                         .padding(0.dp)
                         .align(Alignment.Center) // Center the button horizontally
@@ -323,7 +357,7 @@ fun LandingScreen(navController: NavController) {
                 // Get the size of the canvas (height in this case)
                 canvasHeight = coordinates.size.height.toFloat()
             }
-            .clickable { navController.navigate("home") }) {
+            .clickable { navController.navigate("control") }) {
 
             // Calculate the bottom position for the arc and rect
             val bottomOffset = canvasHeight - diameter // Bottom of the canvas
@@ -367,6 +401,180 @@ fun LandingScreen(navController: NavController) {
                 modifier = Modifier
                     .align(Alignment.Center)  // Align to the center of the Box
             )
+        }
+    }
+}
+
+class ConnectConfigViewModel(application: Application) : AndroidViewModel(application) {
+    private val dao = ConnectConfigDatabase.getDatabase(application).connectConfigDao()
+    val allConfigs: Flow<List<ConnectConfig>> = dao.getAllConfigs()
+
+    fun insertConfig(config: ConnectConfig) {
+        viewModelScope.launch {
+            dao.insertConfig(config)
+        }
+    }
+
+    fun deleteConfig(config: ConnectConfig) {
+        viewModelScope.launch {
+            dao.deleteConfig(config)
+        }
+    }
+}
+
+@Composable
+fun AddConnectConfigScreen(navController: NavController, viewModel: ConnectConfigViewModel) {
+    var selectedOption by remember { mutableStateOf("WiFi") }
+    var address by remember { mutableStateOf("") }
+    var heartbeat by remember { mutableStateOf("") }
+    val configs by viewModel.allConfigs.collectAsState(initial = emptyList())
+
+    Scaffold(
+        topBar = { /* No topBar here, it's effectively removed */ },
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(16.dp)
+        ) {
+            Text("Select Connection Type:", fontWeight = FontWeight.Bold, color = Color.Black)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                RadioButton(
+                    selected = selectedOption == "WiFi",
+                    onClick = { selectedOption = "WiFi" },
+                    colors = RadioButtonDefaults.colors(selectedColor = Color.Black, unselectedColor = Color.Gray)
+                )
+                Text("WiFi", color = Color.Black, modifier = Modifier.clickable { selectedOption = "WiFi" })
+                Spacer(modifier = Modifier.width(16.dp))
+                RadioButton(
+                    selected = selectedOption == "Bluetooth",
+                    onClick = { selectedOption = "Bluetooth" },
+                    colors = RadioButtonDefaults.colors(selectedColor = Color.Black, unselectedColor = Color.Gray)
+                )
+                Text("Bluetooth", color = Color.Black, modifier = Modifier.clickable { selectedOption = "Bluetooth" })
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+
+            OutlinedTextField(
+                value = address,
+                onValueChange = { address = it },
+                label = { Text("IP/MAC Address", color = Color.Gray) },
+                modifier = Modifier.fillMaxWidth(),
+                colors = TextFieldDefaults.colors(
+                    focusedIndicatorColor = Color.Black,
+                    unfocusedIndicatorColor = Color.Gray
+                )
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+
+            OutlinedTextField(
+                value = heartbeat,
+                onValueChange = { heartbeat = it },
+                label = { Text("Heartbeat Frequency (Hz)", color = Color.Gray) },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.fillMaxWidth(),
+                colors = TextFieldDefaults.colors(
+                    focusedIndicatorColor = Color.Black,
+                    unfocusedIndicatorColor = Color.Gray
+                )
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Box(
+                modifier = Modifier.fillMaxWidth() // Ensure it takes full width
+            ) {
+                Button(
+                    onClick = { navController.navigate("landing")
+                        val config = ConnectConfig(
+                            connectionType = selectedOption,
+                            address = address,
+                            heartbeatFrequency = heartbeat.toIntOrNull() ?: 0
+                        )
+                        viewModel.insertConfig(config)},
+                    modifier = Modifier
+                        .padding(0.dp)
+                        .align(Alignment.Center) // Center the button horizontally
+                        .fillMaxWidth(), // Button width set to 80% of the screen width
+                    colors = ButtonDefaults.buttonColors(Color.Black), // Black button color
+                    shape = RectangleShape // Rectangular shape
+                ) {
+                    Text(
+                        "Save new config",
+                        color = Color.White, // Text color set to white to contrast the black button
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+            Text("Saved Configurations:", fontWeight = FontWeight.Bold, color = Color.Black)
+            LazyColumn {
+                items(configs) { config ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.LightGray)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text("Type: ${config.connectionType}", color = Color.Black)
+                            Text("Address: ${config.address}", color = Color.Black)
+                            Text("Heartbeat: ${config.heartbeatFrequency} Hz", color = Color.Black)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Button(
+                                onClick = { viewModel.deleteConfig(config) },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
+                            ) {
+                                Text("Delete", color = Color.White)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Entity(tableName = "connect_config")
+data class ConnectConfig(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val connectionType: String,
+    val address: String,
+    val heartbeatFrequency: Int
+)
+
+@Dao
+interface ConnectConfigDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertConfig(config: ConnectConfig)
+
+    @Query("SELECT * FROM connect_config")
+    fun getAllConfigs(): Flow<List<ConnectConfig>>
+
+    @Delete
+    suspend fun deleteConfig(config: ConnectConfig)
+}
+
+
+@Database(entities = [ConnectConfig::class], version = 1, exportSchema = false)
+abstract class ConnectConfigDatabase : RoomDatabase() {
+    abstract fun connectConfigDao(): ConnectConfigDao
+
+    companion object {
+        @Volatile
+        private var INSTANCE: ConnectConfigDatabase? = null
+
+        fun getDatabase(context: Context): ConnectConfigDatabase {
+            return INSTANCE ?: synchronized(this) {
+                val instance = Room.databaseBuilder(
+                    context.applicationContext,
+                    ConnectConfigDatabase::class.java,
+                    "connect_config_db"
+                ).build()
+                INSTANCE = instance
+                instance
+            }
         }
     }
 }

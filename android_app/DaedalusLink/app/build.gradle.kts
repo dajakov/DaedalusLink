@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    id("com.google.devtools.ksp")
 }
 
 android {
@@ -58,6 +59,9 @@ dependencies {
     implementation(libs.androidx.fragment.ktx)
     implementation(libs.coil.compose)
     implementation (libs.androidx.datastore.preferences)
+    implementation(libs.androidx.room.runtime.v261) // Room runtime library
+    ksp(libs.androidx.room.compiler.v261) // Room compiler with KSP for annotation processing
+    implementation(libs.androidx.room.ktx.v261) // Room KTX for Kotlin extension functions
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
