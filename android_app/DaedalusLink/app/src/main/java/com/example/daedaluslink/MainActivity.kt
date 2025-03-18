@@ -49,6 +49,7 @@ import androidx.navigation.compose.*
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.ui.graphics.graphicsLayer
 import com.example.daedaluslink.ConnectConfigDatabase.Companion.resetDatabase
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 
 class MainActivity : ComponentActivity() {
 
@@ -57,7 +58,10 @@ class MainActivity : ComponentActivity() {
 
     @SuppressLint("UnusedMaterialScaffoldPaddingParameter", "UnusedMaterial3ScaffoldPaddingParameter")
     override fun onCreate(savedInstanceState: Bundle?) {
+        val splashScreen = installSplashScreen()
+
         super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_splash)
 
         resetDatabase(applicationContext) // TODO(remove for production) for development purposes only.
 
