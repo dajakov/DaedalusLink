@@ -103,7 +103,7 @@ class MainActivity : ComponentActivity() {
             ) {
                 // Use ViewModel directly from Compose using viewModel()
                 NavHost(navController, startDestination = "landing") {
-                    composable("landing") { LandingScreen(navController) }
+                    composable("landing") { LandingScreen(navController, connectConfigViewModel) }
                     composable("control") { HomeScreen(navController) }
                     composable("debug") { DashboardScreen(navController) }
                     composable("settings") { NotificationScreen(navController) }
@@ -207,7 +207,7 @@ fun CustomIcon(resourceId: Int, selectedIndex: MutableState<Int>, index: Int) {
 }
 
 @Composable
-fun LandingScreen(navController: NavController) {
+fun LandingScreen(navController: NavController, viewModel: ConnectConfigViewModel) {
     val screenWidth = LocalConfiguration.current.screenWidthDp.dp
     val screenHeight = LocalConfiguration.current.screenHeightDp.dp
 
@@ -220,18 +220,22 @@ fun LandingScreen(navController: NavController) {
     val selectedIndex = remember { mutableIntStateOf(0) }
     val scrollState = rememberScrollState()
 
-    // Sample Material icons list
-    val icons = listOf(
-        IconItem.MaterialIcon(Icons.Filled.Add),
-        IconItem.CustomIcon(R.drawable.r2d2),
-        IconItem.MaterialIcon(Icons.Filled.Settings),
-    )
-    // Text options based on selected icon
-    val texts = listOf(
-        "Add...",
-        "R2D2",
-        "Settings"
-    )
+
+    val configs by viewModel.allConfigs.collectAsState(initial = emptyList())
+
+    val dynamicIcons = configs.map { config ->
+        IconMapper.getIconById(config.iconId)
+    }
+
+    // Create final icons list with "Add" and "Settings"
+    val icons = listOf(IconItem.MaterialIcon(Icons.Filled.Add)) +
+            dynamicIcons +
+            listOf(IconItem.MaterialIcon(Icons.Filled.Settings))
+
+    // Get the names corresponding to the icons
+    val texts = listOf("Add...") +
+            configs.map { it.name } +
+            listOf("Settings")
 
     LaunchedEffect(selectedIndex.intValue) {
         val targetOffset = with(density) {
@@ -248,7 +252,7 @@ fun LandingScreen(navController: NavController) {
                 .padding(top = 16.dp) // Padding from the top
         ) {
             Text(
-                text = texts[selectedIndex.intValue],  // Dynamically change text based on selected icon
+                text = texts.getOrElse(selectedIndex.intValue) { "Unnamed" },  // Dynamically change text based on selected icon
                 style = MaterialTheme.typography.headlineMedium,
                 modifier = Modifier
                     .align(Alignment.Center), // Center text horizontally and vertically within Box
@@ -263,7 +267,6 @@ fun LandingScreen(navController: NavController) {
             icons.forEachIndexed { index, iconItem ->
                 val size = if (index == selectedIndex.intValue) 120.dp else 100.dp
 
-                // Icon button
                 Box(
                     modifier = Modifier
                         .padding(horizontal = 8.dp)
@@ -274,7 +277,6 @@ fun LandingScreen(navController: NavController) {
                 ) {
                     when (iconItem) {
                         is IconItem.MaterialIcon -> {
-                            // Render Material Icon
                             Icon(
                                 imageVector = iconItem.icon,
                                 contentDescription = null,
@@ -282,9 +284,13 @@ fun LandingScreen(navController: NavController) {
                                 tint = if (index == selectedIndex.intValue) Color.Black else Color.Gray
                             )
                         }
+
                         is IconItem.CustomIcon -> {
-                            // Render Custom Icon (Image from resources)
-                            CustomIcon(resourceId = iconItem.resourceId, selectedIndex = selectedIndex, index = index)
+                            CustomIcon(
+                                resourceId = iconItem.resourceId,
+                                selectedIndex = selectedIndex,
+                                index = index
+                            )
                         }
                     }
                 }
