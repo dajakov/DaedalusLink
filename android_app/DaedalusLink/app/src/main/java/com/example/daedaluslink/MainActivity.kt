@@ -2,6 +2,8 @@ package com.example.daedaluslink
 
 import android.annotation.SuppressLint
 import android.os.Bundle
+import android.os.SystemClock
+import android.view.MotionEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
@@ -50,6 +52,20 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.ui.graphics.graphicsLayer
 import com.example.daedaluslink.ConnectConfigDatabase.Companion.resetDatabase
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import java.io.IOException
+import java.net.InetAddress
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.pointerInteropFilter
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.json.Json
 
 class MainActivity : ComponentActivity() {
 
@@ -63,7 +79,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_splash)
 
-        resetDatabase(applicationContext) // TODO(remove for production) for development purposes only.
+//        resetDatabase(applicationContext) // TODO(remove for production) for development purposes only.
 
         actionBar?.hide()
         setContent {
@@ -71,7 +87,8 @@ class MainActivity : ComponentActivity() {
 
             val currentDestination by navController.currentBackStackEntryAsState()
             val showBottomBar = currentDestination?.destination?.route != "landing" &&
-                    currentDestination?.destination?.route != "addConnectConfig"
+                    currentDestination?.destination?.route != "addConnectConfig" &&
+                    currentDestination?.destination?.route != "loading"
 
             Scaffold(
                 bottomBar = {
@@ -104,9 +121,10 @@ class MainActivity : ComponentActivity() {
                 // Use ViewModel directly from Compose using viewModel()
                 NavHost(navController, startDestination = "landing") {
                     composable("landing") { LandingScreen(navController, connectConfigViewModel) }
-                    composable("control") { HomeScreen(navController) }
-                    composable("debug") { DashboardScreen(navController) }
-                    composable("settings") { NotificationScreen(navController) }
+                    composable("loading") { LoadingScreen(navController, "127.0.0.1") }
+                    composable("control") { ControlScreen(navController) }
+                    composable("debug") { DebugScreen(navController) }
+                    composable("settings") { SettingsScreen(navController) }
                     composable("addConnectConfig") { AddConnectConfigScreen(navController, connectConfigViewModel) }
                 }
             }
@@ -119,7 +137,7 @@ val allIcons = listOf(
     IconItem.MaterialIcon(Icons.Default.Info),
     IconItem.MaterialIcon(Icons.Default.PlayArrow),
     IconItem.CustomIcon(R.drawable.r2d2),
-    IconItem.CustomIcon(R.drawable.r2d2)
+    IconItem.CustomIcon(R.drawable.hexapod)
     // Add more icons as needed
 )
 
@@ -136,7 +154,7 @@ object IconMapper {
             "info" -> IconItem.MaterialIcon(Icons.Default.Info) // Example of mapping an ID to a Material icon
             "PlayArrow" -> IconItem.MaterialIcon(Icons.Default.PlayArrow) // Another example for MaterialIcon
             "r2d2" -> IconItem.CustomIcon(R.drawable.r2d2) // Example of mapping an ID to a custom icon
-            "r2d22" -> IconItem.CustomIcon(R.drawable.r2d2) // Another example for custom icons
+            "hexapod" -> IconItem.CustomIcon(R.drawable.hexapod) // Another example for custom icons
             else -> IconItem.MaterialIcon(Icons.Default.Warning) // Default icon if the ID is unrecognized
         }
     }
@@ -151,7 +169,7 @@ object IconMapper {
             }
             is IconItem.CustomIcon -> when (iconItem.resourceId) {
                 R.drawable.r2d2 -> "r2d2"
-                R.drawable.r2d2 -> "r2d22"
+                R.drawable.hexapod -> "hexapod"
                 else -> "default"
             }
         }
@@ -420,7 +438,7 @@ fun LandingScreen(navController: NavController, viewModel: ConnectConfigViewMode
                 // Get the size of the canvas (height in this case)
                 canvasHeight = coordinates.size.height.toFloat()
             }
-            .clickable { navController.navigate("control") }) {
+            .clickable { navController.navigate("loading") }) {
 
             // Calculate the bottom position for the arc and rect
             val bottomOffset = canvasHeight - diameter // Bottom of the canvas
@@ -464,6 +482,66 @@ fun LandingScreen(navController: NavController, viewModel: ConnectConfigViewMode
                 modifier = Modifier
                     .align(Alignment.Center)  // Align to the center of the Box
             )
+        }
+    }
+}
+
+@Composable
+fun LoadingScreen(navController: NavController, ipAddress: String) {
+    BackHandler {
+        navController.navigate("landing") // Instead of going back, navigate to Home
+    }
+
+    var debugText by remember { mutableStateOf("Initializing...") }
+    var isPinging by remember { mutableStateOf(true) }
+
+    // Run ping test asynchronously
+    LaunchedEffect(Unit) {
+        debugText = "Pinging $ipAddress..."
+        val pingResult = performPing(ipAddress)
+        debugText = pingResult
+
+        delay(2000) // Show result for a moment
+        isPinging = false
+        navController.navigate("control")
+    }
+
+    // Display the UI while pinging
+    if (isPinging) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                CircularProgressIndicator(color = Color.Black)
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = debugText,
+                    color = Color.Black,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
+}
+
+// Function to perform a ping to an IP
+suspend fun performPing(ipAddress: String): String {
+    return withContext(Dispatchers.IO) {
+        try {
+            val startTime = SystemClock.elapsedRealtime()
+            val address = InetAddress.getByName(ipAddress)
+            val reachable = address.isReachable(2000) // Timeout: 2s
+            val endTime = SystemClock.elapsedRealtime()
+            if (reachable) {
+                "✅ Ping successful! (${endTime - startTime}ms)"
+            } else {
+                "❌ Ping failed: $ipAddress unreachable."
+            }
+        } catch (e: IOException) {
+            "⚠️ Error: ${e.message}"
         }
     }
 }
@@ -633,7 +711,11 @@ fun AddConnectConfigScreen(navController: NavController, viewModel: ConnectConfi
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(navController: NavController) {
+fun ControlScreen(navController: NavController) {
+    BackHandler {
+        navController.navigate("landing") // Instead of going back, navigate to Home
+    }
+
     Scaffold(
         topBar = { /* No topBar here, it's effectively removed */ },
     ) { paddingValues ->
@@ -643,17 +725,113 @@ fun HomeScreen(navController: NavController) {
                 .padding(paddingValues)
                 .padding(16.dp)
         ) {
-            Button(onClick = { /* Handle click */ }) {
-                Text("Click Me")
+            DynamicUI(jsonConfig)
+        }
+    }
+}
+
+@Serializable
+data class UIElement(
+    val type: String,
+    val label: String,
+    val position: List<Int>,
+    val command: String,
+    val axes: List<String>? = null
+)
+
+@Serializable
+data class UIConfig(
+    val elements: List<UIElement>
+)
+
+@Composable
+fun DynamicUI(jsonString: String) {
+    val config = remember { Json.decodeFromString<UIConfig>(jsonString) }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        config.elements.forEach { element ->
+            when (element.type) {
+                "button" -> ButtonElement(element)
+                "joystick" -> JoystickElement(element)
             }
         }
     }
 }
 
+@Composable
+fun ButtonElement(element: UIElement) {
+    Box(modifier = Modifier
+        .absoluteOffset(x = element.position[0].dp, y = element.position[1].dp)
+    ) {
+        Button(
+            onClick = { println("Command: ${element.command}") },
+            colors = ButtonDefaults.buttonColors(containerColor = Color.Blue)
+        ) {
+            Text(element.label, color = Color.White)
+        }
+    }
+}
+
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+fun JoystickElement(element: UIElement) {
+    var position by remember { mutableStateOf(Pair(0f, 0f)) }
+
+    Box(modifier = Modifier
+        .absoluteOffset(x = element.position[0].dp, y = element.position[1].dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(100.dp)
+                .clip(CircleShape)
+                .background(Color.Gray)
+                .pointerInteropFilter { event ->
+                    when (event.action) {
+                        MotionEvent.ACTION_MOVE -> {
+                            position = Pair(event.x, event.y)
+                        }
+                        MotionEvent.ACTION_UP -> {
+                            position = Pair(0f, 0f)
+                        }
+                    }
+                    true
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            Text("${position.first.toInt()}, ${position.second.toInt()}", color = Color.White, fontSize = 14.sp)
+        }
+    }
+}
+
+// Example JSON data
+const val jsonConfig = """
+    {
+      "elements": [
+        {
+          "type": "button",
+          "label": "Forward",
+          "position": [50, 100],
+          "command": "MOVE_FORWARD"
+        },
+        {
+          "type": "joystick",
+          "label": "Move",
+          "position": [200, 300],
+          "axes": ["X", "Y"],
+          "command": "MOVE_XY"
+        }
+      ]
+    }
+"""
+
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DashboardScreen(navController: NavController) {
+fun DebugScreen(navController: NavController) {
+    BackHandler {
+        navController.navigate("landing") // Instead of going back, navigate to Home
+    }
+
     Scaffold(
         topBar = { /* No topBar here, it's effectively removed */ },
     ) {
@@ -670,7 +848,11 @@ fun DashboardScreen(navController: NavController) {
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NotificationScreen(navController: NavController) {
+fun SettingsScreen(navController: NavController) {
+    BackHandler {
+        navController.navigate("landing") // Instead of going back, navigate to Home
+    }
+
     Scaffold(
         topBar = { /* No topBar here, it's effectively removed */ },
     ) {
