@@ -3,6 +3,7 @@ package com.example.daedaluslink
 import android.annotation.SuppressLint
 import android.os.Bundle
 import android.os.SystemClock
+import android.util.Log
 import android.view.MotionEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -67,7 +68,15 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 
+class SharedState {
+    var isConnected by mutableStateOf(false)
+    var receivedMessages by mutableStateOf(listOf<String>())
+}
+private val sharedState = SharedState()
+
 class MainActivity : ComponentActivity() {
+    private val sharedState = SharedState()
+    private lateinit var webSocketManager: WebSocketManager
 
     // Initialize ViewModel
     private val connectConfigViewModel: ConnectConfigViewModel by viewModels()
@@ -86,9 +95,9 @@ class MainActivity : ComponentActivity() {
             val navController = rememberNavController()
 
             val currentDestination by navController.currentBackStackEntryAsState()
-            val showBottomBar = currentDestination?.destination?.route != "landing" &&
-                    currentDestination?.destination?.route != "addConnectConfig" &&
-                    currentDestination?.destination?.route != "loading"
+            val showBottomBar = currentDestination?.destination?.route?.let { route ->
+                !route.startsWith("loading") && route != "landing" && route != "addConnectConfig"
+            } ?: true
 
             Scaffold(
                 bottomBar = {
@@ -121,7 +130,10 @@ class MainActivity : ComponentActivity() {
                 // Use ViewModel directly from Compose using viewModel()
                 NavHost(navController, startDestination = "landing") {
                     composable("landing") { LandingScreen(navController, connectConfigViewModel) }
-                    composable("loading") { LoadingScreen(navController, "127.0.0.1") }
+                    composable("loading/{activeIndex}") { backStackEntry ->
+                        val activeIndex = backStackEntry.arguments?.getString("activeIndex")?.toIntOrNull() ?: 0
+                        LoadingScreen(navController, connectConfigViewModel, activeIndex)
+                    }
                     composable("control") { ControlScreen(navController) }
                     composable("debug") { DebugScreen(navController) }
                     composable("settings") { SettingsScreen(navController) }
@@ -254,6 +266,8 @@ fun LandingScreen(navController: NavController, viewModel: ConnectConfigViewMode
     val texts = listOf("Add...") +
             configs.map { it.name } +
             listOf("Settings")
+
+    val configIDs = configs.map { it.id}
 
     LaunchedEffect(selectedIndex.intValue) {
         val targetOffset = with(density) {
@@ -431,6 +445,7 @@ fun LandingScreen(navController: NavController, viewModel: ConnectConfigViewMode
         }
 
         var canvasHeight by remember { mutableFloatStateOf(0f) }
+        val noConfigElementSelected = selectedIndex.intValue == 0 || selectedIndex.intValue == icons.size - 1
         Canvas(modifier = Modifier
             .weight(1f)
             .fillMaxWidth()
@@ -438,14 +453,23 @@ fun LandingScreen(navController: NavController, viewModel: ConnectConfigViewMode
                 // Get the size of the canvas (height in this case)
                 canvasHeight = coordinates.size.height.toFloat()
             }
-            .clickable { navController.navigate("loading") }) {
-
+            .let { baseModifier ->
+                if (!noConfigElementSelected) {
+                    baseModifier.clickable {
+                        navController.navigate("loading/${(configIDs.getOrNull(selectedIndex.intValue - 1)).toString()}")
+                    }
+                } else {
+                    baseModifier
+                }
+            }
+        ) {
             // Calculate the bottom position for the arc and rect
             val bottomOffset = canvasHeight - diameter // Bottom of the canvas
+            val color = if (noConfigElementSelected) Color.Gray else Color.Black
 
             // Arc: Position the y-coordinate relative to the bottom
             drawArc(
-                color = Color.Black,
+                color = color,
                 topLeft = Offset(
                     screenWidthPx * 0.5f - diameter / 2,  // Center horizontally
                     bottomOffset - diameter * 0.3f        // Position vertically relative to the bottom
@@ -459,7 +483,7 @@ fun LandingScreen(navController: NavController, viewModel: ConnectConfigViewMode
 
             // Rect: Position the y-coordinate relative to the bottom
             drawRect(
-                color = Color.Black,
+                color = color,
                 topLeft = Offset(
                     screenWidthPx * 0.5f - 15f,  // Center horizontally
                     bottomOffset - diameter * 0.5f // Position vertically relative to the bottom
@@ -487,61 +511,146 @@ fun LandingScreen(navController: NavController, viewModel: ConnectConfigViewMode
 }
 
 @Composable
-fun LoadingScreen(navController: NavController, ipAddress: String) {
-    BackHandler {
-        navController.navigate("landing") // Instead of going back, navigate to Home
+fun LoadingScreen(navController: NavController,
+                  viewModel: ConnectConfigViewModel, activeIndex: Int) {
+
+    BackHandler { }
+
+    val configs by viewModel.allConfigs.collectAsState(initial = emptyList())
+    if (configs.isEmpty()) {
+        // 🔹 Show loading UI while waiting for data
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
+        }
+        return
     }
+
+    val activeConfig = configs.find { it.id == activeIndex }
+
+    val ipAddress = activeConfig?.address
+    val robotName = activeConfig?.name
 
     var debugText by remember { mutableStateOf("Initializing...") }
     var isPinging by remember { mutableStateOf(true) }
+    var connectionSuccess by remember { mutableStateOf(true) }
+    var showExitButton by remember { mutableStateOf(false) }
+    var steps by remember { mutableStateOf(listOf<String>()) }
 
-    // Run ping test asynchronously
-    LaunchedEffect(Unit) {
-        debugText = "Pinging $ipAddress..."
-        val pingResult = performPing(ipAddress)
-        debugText = pingResult
-
-        delay(2000) // Show result for a moment
-        isPinging = false
-        navController.navigate("control")
+    // Function to update steps in the UI (with the option for same line or newline)
+    fun updateSteps(step: String, isSameLine: Boolean = false) {
+        steps = if (isSameLine) {
+            // Append the step to the last entry, keeping it on the same line
+            if (steps.isNotEmpty()) {
+                val lastStep = steps.last() + " | " + step
+                steps.dropLast(1) + lastStep
+            } else {
+                listOf(step)
+            }
+        } else {
+            // Add the step as a new entry (new line)
+            steps + step
+        }
     }
 
-    // Display the UI while pinging
-    if (isPinging) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                CircularProgressIndicator(color = Color.Black)
-                Spacer(modifier = Modifier.height(16.dp))
+    LaunchedEffect(Unit) {
+        // Step 1: Ping the IP address
+        updateSteps("Pinging $ipAddress...")
+        debugText = "Connecting to $robotName..."
+        val pingResult = ipAddress?.let { performPing(it) }
+
+        if (pingResult == true) {
+            updateSteps("✅", true)
+        } else {
+            updateSteps("❌", true)
+            connectionSuccess = false
+            showExitButton = true // Show exit button if ping fails
+        }
+
+        // Step 2: Try to connect to WebSocket (only if ping is successful)
+        if (pingResult == true) {
+            updateSteps("Connecting to WebSocket...")
+            val webSocketManager = WebSocketManager("ws://$ipAddress", sharedState)
+//            val webSocketResult = webSocketManager.connectToWebSocket()
+            webSocketManager.connectToWebSocket()
+//
+//            if (!webSocketResult) {
+//                updateSteps("❌ WebSocket connection failed.", true)
+//                connectionSuccess = false
+//                showExitButton = true // Show exit button if WebSocket fails
+//            } else {
+//                updateSteps("✅ WebSocket connection successful.", true)
+//                connectionSuccess = true
+//            }
+        }
+
+        // Always wait 2 seconds before navigating
+        delay(2000)
+
+        if (connectionSuccess) {
+            navController.navigate("control")
+        }
+    }
+
+    // UI for loading screen
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.White),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            CircularProgressIndicator(color = Color.Black)
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = debugText,
+                color = Color.Black,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+            // Display the steps list under the progress indicator
+            steps.forEach { step ->
                 Text(
-                    text = debugText,
+                    text = step,
                     color = Color.Black,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold
+                    fontSize = 14.sp
                 )
+            }
+
+            // Show exit button if there's a failure
+            if (showExitButton) {
+                Spacer(modifier = Modifier.height(16.dp))
+                Button(
+                    onClick = { navController.navigate("landing") },
+                    modifier = Modifier
+                        .padding(0.dp)
+                        .fillMaxWidth(0.9f), // Button width set to 80% of the screen width
+                    colors = ButtonDefaults.buttonColors(Color.Black), // Black button color
+                    shape = RectangleShape // Rectangular shape
+                ) {
+                    Text(
+                        "Exit",
+                        color = Color.White, // Text color set to white to contrast the black button
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
             }
         }
     }
 }
 
 // Function to perform a ping to an IP
-suspend fun performPing(ipAddress: String): String {
+suspend fun performPing(ipAddress: String): Boolean {
     return withContext(Dispatchers.IO) {
         try {
             val startTime = SystemClock.elapsedRealtime()
             val address = InetAddress.getByName(ipAddress)
             val reachable = address.isReachable(2000) // Timeout: 2s
             val endTime = SystemClock.elapsedRealtime()
-            if (reachable) {
-                "✅ Ping successful! (${endTime - startTime}ms)"
-            } else {
-                "❌ Ping failed: $ipAddress unreachable."
-            }
+            reachable
         } catch (e: IOException) {
-            "⚠️ Error: ${e.message}"
+            false
         }
     }
 }
@@ -592,7 +701,9 @@ fun AddConnectConfigScreen(navController: NavController, viewModel: ConnectConfi
                                 if (selectedIcon == icon) Modifier
                                     .graphicsLayer { alpha = 1f } // Selected icon is normal
                                 else Modifier
-                                    .graphicsLayer { alpha = 0.4f } // Non-selected icons are grayed out
+                                    .graphicsLayer {
+                                        alpha = 0.4f
+                                    } // Non-selected icons are grayed out
                             )
                     ) {
                         DisplayIcon(icon, modifier = Modifier.size(48.dp)) // Display the icon
@@ -790,6 +901,7 @@ fun JoystickElement(element: UIElement) {
                         MotionEvent.ACTION_MOVE -> {
                             position = Pair(event.x, event.y)
                         }
+
                         MotionEvent.ACTION_UP -> {
                             position = Pair(0f, 0f)
                         }
