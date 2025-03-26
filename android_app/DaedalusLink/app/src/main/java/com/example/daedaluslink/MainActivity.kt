@@ -2,8 +2,6 @@ package com.example.daedaluslink
 
 import android.annotation.SuppressLint
 import android.os.Bundle
-import android.os.SystemClock
-import android.util.Log
 import android.view.MotionEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -51,8 +49,6 @@ import androidx.navigation.NavController
 import androidx.navigation.compose.*
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.ui.graphics.graphicsLayer
-import com.example.daedaluslink.ConnectConfigDatabase.Companion.resetDatabase
-import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -64,26 +60,19 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInteropFilter
+import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 
-class SharedState {
-    var isConnected by mutableStateOf(false)
-    var receivedMessages by mutableStateOf(listOf<String>())
-}
 private val sharedState = SharedState()
 
 class MainActivity : ComponentActivity() {
-    private val sharedState = SharedState()
-    private lateinit var webSocketManager: WebSocketManager
-
     // Initialize ViewModel
     private val connectConfigViewModel: ConnectConfigViewModel by viewModels()
 
     @SuppressLint("UnusedMaterialScaffoldPaddingParameter", "UnusedMaterial3ScaffoldPaddingParameter")
     override fun onCreate(savedInstanceState: Bundle?) {
-        val splashScreen = installSplashScreen()
 
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_splash)
@@ -238,13 +227,13 @@ fun CustomIcon(resourceId: Int, selectedIndex: MutableState<Int>, index: Int) {
 
 @Composable
 fun LandingScreen(navController: NavController, viewModel: ConnectConfigViewModel) {
+    sharedState.clear()
+
     val screenWidth = LocalConfiguration.current.screenWidthDp.dp
-    val screenHeight = LocalConfiguration.current.screenHeightDp.dp
 
     // Convert dp to px using LocalDensity inside the composable context
     val density = LocalDensity.current
     val screenWidthPx = with(density) { screenWidth.toPx() }
-    val screenHeightPx = with(density) { screenHeight.toPx() }
     val diameter = screenWidthPx * 0.4f
 
     val selectedIndex = remember { mutableIntStateOf(0) }
@@ -366,8 +355,6 @@ fun LandingScreen(navController: NavController, viewModel: ConnectConfigViewMode
 
             // Create a string value to store the selected city
             var mSelectedText by remember { mutableStateOf(mVersionNumbers.last()) } // Default to the last element
-
-            var mTextFieldSize by remember { mutableStateOf(Size.Zero) }
 
             // Up Icon when expanded and down icon when collapsed
             val icon = if (mExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown
@@ -511,9 +498,7 @@ fun LandingScreen(navController: NavController, viewModel: ConnectConfigViewMode
 }
 
 @Composable
-fun LoadingScreen(navController: NavController,
-                  viewModel: ConnectConfigViewModel, activeIndex: Int) {
-
+fun LoadingScreen(navController: NavController, viewModel: ConnectConfigViewModel, activeIndex: Int) {
     BackHandler { }
 
     val configs by viewModel.allConfigs.collectAsState(initial = emptyList())
@@ -529,9 +514,9 @@ fun LoadingScreen(navController: NavController,
 
     val ipAddress = activeConfig?.address
     val robotName = activeConfig?.name
+    val heartbeatFrequency = activeConfig?.heartbeatFrequency!!.toLong()
 
     var debugText by remember { mutableStateOf("Initializing...") }
-    var isPinging by remember { mutableStateOf(true) }
     var connectionSuccess by remember { mutableStateOf(true) }
     var showExitButton by remember { mutableStateOf(false) }
     var steps by remember { mutableStateOf(listOf<String>()) }
@@ -552,11 +537,13 @@ fun LoadingScreen(navController: NavController,
         }
     }
 
+    val context = LocalContext.current
     LaunchedEffect(Unit) {
         // Step 1: Ping the IP address
         updateSteps("Pinging $ipAddress...")
-        debugText = "Connecting to $robotName..."
+        debugText = "Connecting to $robotName... "
         val pingResult = ipAddress?.let { performPing(it) }
+        var webSocketResult = false
 
         if (pingResult == true) {
             updateSteps("✅", true)
@@ -566,24 +553,44 @@ fun LoadingScreen(navController: NavController,
             showExitButton = true // Show exit button if ping fails
         }
 
-        // Step 2: Try to connect to WebSocket (only if ping is successful)
+        // Step 2: Try to connect to WebSocket
         if (pingResult == true) {
-            updateSteps("Connecting to WebSocket...")
-            val webSocketManager = WebSocketManager("ws://$ipAddress", sharedState)
-//            val webSocketResult = webSocketManager.connectToWebSocket()
-            webSocketManager.connectToWebSocket()
-//
-//            if (!webSocketResult) {
-//                updateSteps("❌ WebSocket connection failed.", true)
-//                connectionSuccess = false
-//                showExitButton = true // Show exit button if WebSocket fails
-//            } else {
-//                updateSteps("✅ WebSocket connection successful.", true)
-//                connectionSuccess = true
-//            }
+            updateSteps("Connecting to WebSocket... ")
+            val webSocketManager = WebSocketManager(context,
+                "ws://$ipAddress", sharedState, heartbeatFrequency,)
+            webSocketResult = webSocketManager.connectToWebSocket()
+//            webSocketManager.connectToWebSocket()
+
+            if (!webSocketResult) {
+                updateSteps("❌", true)
+                connectionSuccess = false
+                showExitButton = true // Show exit button if WebSocket fails
+            } else {
+                updateSteps("✅", true)
+                connectionSuccess = true
+            }
         }
 
-        // Always wait 2 seconds before navigating
+        // Step 3: Wait for a valid JSON file
+        if (webSocketResult) {
+            updateSteps("Waiting for JSON file... ")
+            // ✅ Wait for JSON Reception with Timeout (5 seconds)
+            val jsonReceived = withTimeoutOrNull(5000) { // Timeout: 5 seconds
+                while (!sharedState.isJsonReceived) {
+                    delay(500) // Check every 500ms
+                }
+                true // JSON received within time
+            }
+
+            if (jsonReceived == true) {
+                updateSteps("✅", true)
+            } else {
+                updateSteps("❌", true)
+                connectionSuccess = false
+                showExitButton = true // Show exit button on failure
+            }
+        }
+
         delay(2000)
 
         if (connectionSuccess) {
@@ -644,11 +651,9 @@ fun LoadingScreen(navController: NavController,
 suspend fun performPing(ipAddress: String): Boolean {
     return withContext(Dispatchers.IO) {
         try {
-            val startTime = SystemClock.elapsedRealtime()
-            val address = InetAddress.getByName(ipAddress)
-            val reachable = address.isReachable(2000) // Timeout: 2s
-            val endTime = SystemClock.elapsedRealtime()
-            reachable
+            val cleanIp = ipAddress.substringBefore(":") // ✅ Remove port if present
+            val address = InetAddress.getByName(cleanIp)
+            address.isReachable(2000) // ✅ Timeout: 2 seconds
         } catch (e: IOException) {
             false
         }
@@ -820,7 +825,6 @@ fun AddConnectConfigScreen(navController: NavController, viewModel: ConnectConfi
 }
 
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ControlScreen(navController: NavController) {
     BackHandler {
@@ -937,7 +941,6 @@ const val jsonConfig = """
 """
 
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DebugScreen(navController: NavController) {
     BackHandler {
@@ -958,7 +961,6 @@ fun DebugScreen(navController: NavController) {
 }
 
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(navController: NavController) {
     BackHandler {

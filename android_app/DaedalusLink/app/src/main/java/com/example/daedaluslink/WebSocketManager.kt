@@ -1,34 +1,32 @@
 package com.example.daedaluslink
+
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
-import android.widget.Toast
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.*
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.Response
-import okhttp3.WebSocket
-import okhttp3.WebSocketListener
+import okhttp3.*
+import java.io.File
 
-class WebSocketManager(private val url: String, val sharedState: SharedState) {
+class WebSocketManager(private val context: Context, private val url: String, val sharedState: SharedState, private val resendDelay: Long) {
     private var client: OkHttpClient = OkHttpClient()
     private lateinit var webSocket: WebSocket
+    private val gson = Gson()
 
     private var lastCommand: String? = null
     private var lastCommandTimestamp: Long = 0
-    private val resendDelay = 100L
     private var resendJob: Job? = null
 
-    // WebSocket connection
-    fun connectToWebSocket() {
+    suspend fun connectToWebSocket(): Boolean {
         val request = Request.Builder().url(url).build()
-
         val maxMessages = 100
+        val connectionResult = CompletableDeferred<Boolean>()
 
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-//                showToast("Connected to WebSocket")
                 sharedState.isConnected = true
+                connectionResult.complete(true) // ✅ Connection successful
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
@@ -37,29 +35,34 @@ class WebSocketManager(private val url: String, val sharedState: SharedState) {
                 } else {
                     sharedState.receivedMessages += text
                 }
+                processReceivedMessage(text)
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-//                showToast("Error: ${t.message}")
                 sharedState.isConnected = false
+                connectionResult.complete(false) // ❌ Connection failed
                 reconnectWebSocket()
             }
 
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
                 super.onClosing(webSocket, code, reason)
-//                showToast("Connection closed!")
                 sharedState.isConnected = false
             }
         })
+
         startResendChecker()
+
+        return withTimeoutOrNull(5000) { connectionResult.await() } ?: false
     }
 
     fun reconnectWebSocket() {
         Handler(Looper.getMainLooper()).postDelayed({
-//            showToast("Trying to reconnect...")
-            connectToWebSocket()
+            CoroutineScope(Dispatchers.IO).launch {
+                connectToWebSocket()
+            }
         }, 5000)
     }
+
 
     fun sendMovementCommand(x: Byte, y: Byte) {
         val command = "move $x,$y"
@@ -74,8 +77,6 @@ class WebSocketManager(private val url: String, val sharedState: SharedState) {
         if (::webSocket.isInitialized) {
             webSocket.send(command)
             updateLastCommand(command)
-        } else {
-//            showToast("WebSocket not connected!")
         }
     }
 
@@ -97,5 +98,51 @@ class WebSocketManager(private val url: String, val sharedState: SharedState) {
                 delay(resendDelay)
             }
         }
+    }
+
+    private fun processReceivedMessage(message: String) {
+        try {
+            val type = object : TypeToken<Map<String, Any>>() {}.type
+            val jsonData: Map<String, Any> = gson.fromJson(message, type)
+
+            // Save received JSON in shared state
+            sharedState.receivedJsonData = jsonData
+
+            // Save JSON to file
+            saveJsonToFile(message)
+
+            // ✅ Notify observers that JSON was received
+            sharedState.isJsonReceived = true
+        } catch (e: Exception) {
+            println("Failed to parse JSON: ${e.message}")
+        }
+    }
+
+    private fun saveJsonToFile(jsonString: String) {
+        try {
+            val directory = File(context.filesDir, "my_app_data")
+            if (!directory.exists()) {
+                directory.mkdirs()
+            }
+            val file = File(directory, "received_data.json")
+            file.writeText(jsonString)
+        } catch (e: Exception) {
+            println("Error saving JSON file: ${e.message}")
+        }
+    }
+}
+
+// Shared state class
+class SharedState {
+    var isConnected: Boolean = false
+    var receivedMessages: List<String> = emptyList()
+    var receivedJsonData: Map<String, Any>? = null
+    var isJsonReceived: Boolean = false // ✅ Track JSON reception
+
+    fun clear() {
+        isConnected = false
+        receivedMessages = emptyList()
+        receivedJsonData = null
+        isJsonReceived = false
     }
 }

@@ -70,6 +70,7 @@ dependencies {
     implementation(libs.kotlinx.serialization.json.v180)
     ksp(libs.androidx.room.compiler.v261) // Room compiler with KSP for annotation processing
     implementation(libs.androidx.room.ktx.v261) // Room KTX for Kotlin extension functions
+    implementation(libs.gson)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
