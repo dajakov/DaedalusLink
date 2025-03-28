@@ -70,6 +70,7 @@ private val sharedState = SharedState()
 class MainActivity : ComponentActivity() {
     // Initialize ViewModel
     private val connectConfigViewModel: ConnectConfigViewModel by viewModels()
+    private val linkConfigviewModel: LinkConfigViewModel by viewModels()
 
     @SuppressLint("UnusedMaterialScaffoldPaddingParameter", "UnusedMaterial3ScaffoldPaddingParameter")
     override fun onCreate(savedInstanceState: Bundle?) {

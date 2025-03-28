@@ -12,11 +12,3 @@ data class ConnectConfig(
     val heartbeatFrequency: Int,
     val iconId: String
 )
-
-//@Entity(tableName = "link_config")
-//data class LinkConfig(
-//    @PrimaryKey(autoGenerate = true) val id: Int = 0,
-//    val connectionType: String,
-//    val address: String,
-//    val heartbeatFrequency: Int
-//)
