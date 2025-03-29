@@ -62,15 +62,17 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.withTimeoutOrNull
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 
 private val sharedState = SharedState()
 
 class MainActivity : ComponentActivity() {
     // Initialize ViewModel
     private val connectConfigViewModel: ConnectConfigViewModel by viewModels()
-    private val linkConfigviewModel: LinkConfigViewModel by viewModels()
+    private val linkConfigViewModel: LinkConfigViewModel by viewModels()
 
     @SuppressLint("UnusedMaterialScaffoldPaddingParameter", "UnusedMaterial3ScaffoldPaddingParameter")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -119,10 +121,12 @@ class MainActivity : ComponentActivity() {
             ) {
                 // Use ViewModel directly from Compose using viewModel()
                 NavHost(navController, startDestination = "landing") {
-                    composable("landing") { LandingScreen(navController, connectConfigViewModel) }
-                    composable("loading/{activeIndex}") { backStackEntry ->
-                        val activeIndex = backStackEntry.arguments?.getString("activeIndex")?.toIntOrNull() ?: 0
-                        LoadingScreen(navController, connectConfigViewModel, activeIndex)
+                    composable("landing") { LandingScreen(navController, connectConfigViewModel, linkConfigViewModel) }
+                    composable("loading/{configIndex}/{linkIndex}") { backStackEntry ->
+                        val configIndex = backStackEntry.arguments?.getString("configIndex")?.toIntOrNull() ?: 0
+                        val linkIndex = backStackEntry.arguments?.getString("linkIndex")?.toIntOrNull() ?: 0
+
+                        LoadingScreen(navController, connectConfigViewModel, configIndex, linkConfigViewModel, linkIndex)
                     }
                     composable("control") { ControlScreen(navController) }
                     composable("debug") { DebugScreen(navController) }
@@ -149,7 +153,6 @@ sealed class IconItem {
 }
 
 object IconMapper {
-
     // Mapping from icon ID to IconItem
     fun getIconById(iconId: String): IconItem {
         return when (iconId) {
@@ -161,7 +164,7 @@ object IconMapper {
         }
     }
 
-    // Mapping from IconItem to ID (store this ID in the database)
+    // Mapping from IconItem to ID
     fun getIconId(iconItem: IconItem): String {
         return when (iconItem) {
             is IconItem.MaterialIcon -> when (iconItem.icon) {
@@ -227,7 +230,8 @@ fun CustomIcon(resourceId: Int, selectedIndex: MutableState<Int>, index: Int) {
 }
 
 @Composable
-fun LandingScreen(navController: NavController, viewModel: ConnectConfigViewModel) {
+fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectConfigViewModel,
+                  linkConfigViewModel: LinkConfigViewModel) {
     sharedState.clear()
 
     val screenWidth = LocalConfiguration.current.screenWidthDp.dp
@@ -237,13 +241,16 @@ fun LandingScreen(navController: NavController, viewModel: ConnectConfigViewMode
     val screenWidthPx = with(density) { screenWidth.toPx() }
     val diameter = screenWidthPx * 0.4f
 
+    // Track the selected config index (-1 for Auto-Pull)
+    var linkIndex by remember { mutableIntStateOf(-1) }
+
     val selectedIndex = remember { mutableIntStateOf(0) }
     val scrollState = rememberScrollState()
 
 
-    val configs by viewModel.allConfigs.collectAsState(initial = emptyList())
+    val connectConfigs by connectConfigViewModel.allConfigs.collectAsState(initial = emptyList())
 
-    val dynamicIcons = configs.map { config ->
+    val dynamicIcons = connectConfigs.map { config ->
         IconMapper.getIconById(config.iconId)
     }
 
@@ -254,10 +261,10 @@ fun LandingScreen(navController: NavController, viewModel: ConnectConfigViewMode
 
     // Get the names corresponding to the icons
     val texts = listOf("Add...") +
-            configs.map { it.name } +
+            connectConfigs.map { it.name } +
             listOf("Settings")
 
-    val configIDs = configs.map { it.id}
+    val configIDs = connectConfigs.map { it.id}
 
     LaunchedEffect(selectedIndex.intValue) {
         val targetOffset = with(density) {
@@ -348,65 +355,51 @@ fun LandingScreen(navController: NavController, viewModel: ConnectConfigViewMode
                 }
             }
         } else {
-            // Declaring a boolean value to store the expanded state of the TextField
             var mExpanded by remember { mutableStateOf(false) }
 
-            // Create a list of cities
-            val mVersionNumbers = listOf("Tatooine", "Coruscant", "Hoth")
+            // Collect available LinkConfigs from ViewModel
+            val linkConfigs by linkConfigViewModel.allConfigs.collectAsState(initial = emptyList())
 
-            // Create a string value to store the selected city
-            var mSelectedText by remember { mutableStateOf(mVersionNumbers.last()) } // Default to the last element
+            // Create a list of config names + Auto-Pull
+            val configNames = linkConfigs.map { it.name } + "Auto-Pull from Robot"
 
-            // Up Icon when expanded and down icon when collapsed
             val icon = if (mExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown
 
             Column(Modifier.padding(15.dp)) {
-                // Label for the dropdown
-                Text(
-                    text = "Select config",
-                    modifier = Modifier.padding(bottom = 5.dp) // Space between label and dropdown
-                )
+                Text("Select Link Config", modifier = Modifier.padding(bottom = 5.dp))
 
-                // Visual Box around dropdown and the selected value
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .border(1.dp, Color.Gray, RoundedCornerShape(8.dp)) // Box with border and rounded corners
-                        .clickable { mExpanded = !mExpanded } // Toggle dropdown when clicked
-                        .padding(16.dp) // Padding inside the box
+                        .border(1.dp, Color.Gray, RoundedCornerShape(8.dp))
+                        .clickable { mExpanded = !mExpanded }
+                        .padding(16.dp)
                 ) {
-                    // Display the currently selected value
                     Text(
-                        text = mSelectedText,
+                        text = configNames.getOrNull(linkIndex) ?: "[Auto-Pull from Robot]",
                         style = MaterialTheme.typography.bodyMedium,
                         color = Color.Black
                     )
 
-                    // Icon to indicate dropdown (arrow)
                     Icon(
                         imageVector = icon,
                         contentDescription = "Dropdown icon",
-                        modifier = Modifier
-                            .align(Alignment.CenterEnd)
-                            .padding(5.dp)
+                        modifier = Modifier.align(Alignment.CenterEnd).padding(5.dp)
                     )
                 }
 
-                // Dropdown menu
                 DropdownMenu(
                     expanded = mExpanded,
-                    onDismissRequest = { mExpanded = false }, // Close menu when clicked outside
-                    modifier = Modifier
-                        .width(200.dp) // Set width of dropdown menu
-                        .padding(top = 8.dp) // Add space between box and dropdown
+                    onDismissRequest = { mExpanded = false },
+                    modifier = Modifier.width(200.dp).padding(top = 8.dp)
                 ) {
-                    mVersionNumbers.forEach { label ->
+                    configNames.forEachIndexed { index, name ->
                         DropdownMenuItem(
                             onClick = {
-                                mSelectedText = label
-                                mExpanded = false // Close dropdown after selection
+                                linkIndex = if (index == configNames.lastIndex) -1 else index
+                                mExpanded = false
                             },
-                            text = { Text(text = label) }
+                            text = { Text(text = name) }
                         )
                     }
                 }
@@ -444,7 +437,7 @@ fun LandingScreen(navController: NavController, viewModel: ConnectConfigViewMode
             .let { baseModifier ->
                 if (!noConfigElementSelected) {
                     baseModifier.clickable {
-                        navController.navigate("loading/${(configIDs.getOrNull(selectedIndex.intValue - 1)).toString()}")
+                        navController.navigate("loading/${(configIDs.getOrNull(selectedIndex.intValue - 1))}/${linkIndex}")
                     }
                 } else {
                     baseModifier
@@ -499,11 +492,12 @@ fun LandingScreen(navController: NavController, viewModel: ConnectConfigViewMode
 }
 
 @Composable
-fun LoadingScreen(navController: NavController, viewModel: ConnectConfigViewModel, activeIndex: Int) {
+fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectConfigViewModel,
+                  configIndex: Int, linkConfigViewModel: LinkConfigViewModel, linkIndex: Int) {
     BackHandler { }
 
-    val configs by viewModel.allConfigs.collectAsState(initial = emptyList())
-    if (configs.isEmpty()) {
+    val connectConfigs by connectConfigViewModel.allConfigs.collectAsState(initial = emptyList())
+    if (connectConfigs.isEmpty()) {
         // 🔹 Show loading UI while waiting for data
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator()
@@ -511,7 +505,7 @@ fun LoadingScreen(navController: NavController, viewModel: ConnectConfigViewMode
         return
     }
 
-    val activeConfig = configs.find { it.id == activeIndex }
+    val activeConfig = connectConfigs.find { it.id == configIndex }
 
     val ipAddress = activeConfig?.address
     val robotName = activeConfig?.name
@@ -575,10 +569,9 @@ fun LoadingScreen(navController: NavController, viewModel: ConnectConfigViewMode
         // Step 3: Wait for a valid JSON file
         if (webSocketResult) {
             updateSteps("Waiting for JSON file... ")
-            // ✅ Wait for JSON Reception with Timeout (5 seconds)
-            val jsonReceived = withTimeoutOrNull(5000) { // Timeout: 5 seconds
+            val jsonReceived = withTimeoutOrNull(5000) {
                 while (!sharedState.isJsonReceived) {
-                    delay(500) // Check every 500ms
+                    delay(500)
                 }
                 true // JSON received within time
             }
@@ -588,7 +581,7 @@ fun LoadingScreen(navController: NavController, viewModel: ConnectConfigViewMode
             } else {
                 updateSteps("❌", true)
                 connectionSuccess = false
-                showExitButton = true // Show exit button on failure
+                showExitButton = true // Show exit button if JSON reception fails
             }
         }
 
@@ -825,12 +818,14 @@ fun AddConnectConfigScreen(navController: NavController, viewModel: ConnectConfi
     }
 }
 
-
 @Composable
 fun ControlScreen(navController: NavController) {
     BackHandler {
         navController.navigate("landing") // Instead of going back, navigate to Home
     }
+
+    // Assuming receivedJsonData is already a valid Map<String, Any>
+    val receivedJsonData = sharedState.receivedJsonData
 
     Scaffold(
         topBar = { /* No topBar here, it's effectively removed */ },
@@ -841,31 +836,22 @@ fun ControlScreen(navController: NavController) {
                 .padding(paddingValues)
                 .padding(16.dp)
         ) {
-            DynamicUI(jsonConfig)
+            if (receivedJsonData.isNotEmpty()) {
+                DynamicUI(receivedJsonData)
+            } else {
+                Text("Waiting for configuration...")
+            }
         }
     }
 }
 
-@Serializable
-data class UIElement(
-    val type: String,
-    val label: String,
-    val position: List<Int>,
-    val command: String,
-    val axes: List<String>? = null
-)
-
-@Serializable
-data class UIConfig(
-    val elements: List<UIElement>
-)
-
 @Composable
 fun DynamicUI(jsonString: String) {
-    val config = remember { Json.decodeFromString<UIConfig>(jsonString) }
+    // Deserialize JSON into UIConfig object
+    val config = remember { json.decodeFromString<LinkConfig>(jsonString) }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        config.elements.forEach { element ->
+        config.interfaceData.forEach { element ->
             when (element.type) {
                 "button" -> ButtonElement(element)
                 "joystick" -> JoystickElement(element)
@@ -875,12 +861,14 @@ fun DynamicUI(jsonString: String) {
 }
 
 @Composable
-fun ButtonElement(element: UIElement) {
+fun ButtonElement(element: InterfaceData) {
     Box(modifier = Modifier
         .absoluteOffset(x = element.position[0].dp, y = element.position[1].dp)
     ) {
         Button(
-            onClick = { println("Command: ${element.command}") },
+            onClick = {
+                println("Command: ${element.command}") // Handle command here (e.g., send a WebSocket message or perform action)
+            },
             colors = ButtonDefaults.buttonColors(containerColor = Color.Blue)
         ) {
             Text(element.label, color = Color.White)
@@ -890,7 +878,7 @@ fun ButtonElement(element: UIElement) {
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-fun JoystickElement(element: UIElement) {
+fun JoystickElement(element: InterfaceData) {
     var position by remember { mutableStateOf(Pair(0f, 0f)) }
 
     Box(modifier = Modifier
@@ -920,26 +908,6 @@ fun JoystickElement(element: UIElement) {
     }
 }
 
-// Example JSON data
-const val jsonConfig = """
-    {
-      "elements": [
-        {
-          "type": "button",
-          "label": "Forward",
-          "position": [50, 100],
-          "command": "MOVE_FORWARD"
-        },
-        {
-          "type": "joystick",
-          "label": "Move",
-          "position": [200, 300],
-          "axes": ["X", "Y"],
-          "command": "MOVE_XY"
-        }
-      ]
-    }
-"""
 
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @Composable

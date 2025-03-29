@@ -8,7 +8,7 @@ import kotlinx.coroutines.launch
 
 class LinkConfigViewModel(application: Application) : AndroidViewModel(application) {
     private val dao = LinkConfigDatabase.getDatabase(application).linkConfigDao()
-    val allLinkConfigs: Flow<List<LinkConfig>> = dao.getAllLinkConfigs()
+    val allConfigs: Flow<List<LinkConfig>> = dao.getAllLinkConfigs()
 
     fun insertLinkConfig(linkConfig: LinkConfig) {
         viewModelScope.launch {

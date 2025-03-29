@@ -102,32 +102,12 @@ class WebSocketManager(private val context: Context, private val url: String, va
 
     private fun processReceivedMessage(message: String) {
         try {
-            val type = object : TypeToken<Map<String, Any>>() {}.type
-            val jsonData: Map<String, Any> = gson.fromJson(message, type)
-
             // Save received JSON in shared state
-            sharedState.receivedJsonData = jsonData
-
-            // Save JSON to file
-            saveJsonToFile(message)
-
+            sharedState.receivedJsonData = message
             // ✅ Notify observers that JSON was received
             sharedState.isJsonReceived = true
         } catch (e: Exception) {
             println("Failed to parse JSON: ${e.message}")
-        }
-    }
-
-    private fun saveJsonToFile(jsonString: String) {
-        try {
-            val directory = File(context.filesDir, "my_app_data")
-            if (!directory.exists()) {
-                directory.mkdirs()
-            }
-            val file = File(directory, "received_data.json")
-            file.writeText(jsonString)
-        } catch (e: Exception) {
-            println("Error saving JSON file: ${e.message}")
         }
     }
 }
@@ -136,13 +116,13 @@ class WebSocketManager(private val context: Context, private val url: String, va
 class SharedState {
     var isConnected: Boolean = false
     var receivedMessages: List<String> = emptyList()
-    var receivedJsonData: Map<String, Any>? = null
+    var receivedJsonData: String = ""
     var isJsonReceived: Boolean = false // ✅ Track JSON reception
 
     fun clear() {
         isConnected = false
         receivedMessages = emptyList()
-        receivedJsonData = null
+        receivedJsonData = ""
         isJsonReceived = false
     }
 }
