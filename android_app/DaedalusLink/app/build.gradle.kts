@@ -69,6 +69,7 @@ dependencies {
     implementation(libs.androidx.core.splashscreen) // Room runtime library
     implementation(libs.kotlinx.serialization.json.v180)
     implementation(libs.androidx.adapters)
+    implementation(libs.androidx.compose.testing)
     ksp(libs.androidx.room.compiler.v261) // Room compiler with KSP for annotation processing
     implementation(libs.androidx.room.ktx.v261) // Room KTX for Kotlin extension functions
     implementation(libs.gson)

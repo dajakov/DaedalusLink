@@ -2,7 +2,6 @@ package com.example.daedaluslink
 
 import android.annotation.SuppressLint
 import android.os.Bundle
-import android.view.MotionEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
@@ -56,16 +55,11 @@ import java.io.IOException
 import java.net.InetAddress
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.input.pointer.pointerInteropFilter
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.withTimeoutOrNull
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 
 private val sharedState = SharedState()
 
@@ -85,6 +79,8 @@ class MainActivity : ComponentActivity() {
         actionBar?.hide()
         setContent {
             val navController = rememberNavController()
+
+            val webSocketManager by remember { mutableStateOf<WebSocketManager?>(null) }
 
             val currentDestination by navController.currentBackStackEntryAsState()
             val showBottomBar = currentDestination?.destination?.route?.let { route ->
@@ -128,7 +124,11 @@ class MainActivity : ComponentActivity() {
 
                         LoadingScreen(navController, connectConfigViewModel, configIndex, linkConfigViewModel, linkIndex)
                     }
-                    composable("control") { ControlScreen(navController) }
+                    composable("control") {
+                        webSocketManager?.let {
+                            ControlScreen(navController, it)
+                        } ?: Text("Error: WebSocketManager not initialized")
+                    }
                     composable("debug") { DebugScreen(navController) }
                     composable("settings") { SettingsScreen(navController) }
                     composable("addConnectConfig") { AddConnectConfigScreen(navController, connectConfigViewModel) }
@@ -532,6 +532,10 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
         }
     }
 
+    val webSocketManager = remember {
+        mutableStateOf<WebSocketManager?>(null)
+    }
+
     val context = LocalContext.current
     LaunchedEffect(Unit) {
         // Step 1: Ping the IP address
@@ -551,10 +555,9 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
         // Step 2: Try to connect to WebSocket
         if (pingResult == true) {
             updateSteps("Connecting to WebSocket... ")
-            val webSocketManager = WebSocketManager(context,
+            webSocketManager.value = WebSocketManager(context,
                 "ws://$ipAddress", sharedState, heartbeatFrequency,)
-            webSocketResult = webSocketManager.connectToWebSocket()
-//            webSocketManager.connectToWebSocket()
+            webSocketResult = webSocketManager.value!!.connectToWebSocket()
 
             if (!webSocketResult) {
                 updateSteps("❌", true)
@@ -819,7 +822,25 @@ fun AddConnectConfigScreen(navController: NavController, viewModel: ConnectConfi
 }
 
 @Composable
-fun ControlScreen(navController: NavController) {
+fun GridLayout(content: @Composable (Pair<Float, Float>) -> Unit) {
+    val screenHeight = LocalConfiguration.current.screenHeightDp - 48 // Exclude bottom nav (adjust as needed)
+    val screenWidth = LocalConfiguration.current.screenWidthDp
+
+    val columns = 8
+    val rows = 14
+
+    val cellWidth = screenWidth / columns.toFloat()
+    val cellHeight = screenHeight / rows.toFloat()
+
+    val gridSize = Pair(cellWidth, cellHeight)
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        content(gridSize) // Pass gridSize to children
+    }
+}
+
+@Composable
+fun ControlScreen(navController: NavController, webSocketManager: WebSocketManager) {
     BackHandler {
         navController.navigate("landing") // Instead of going back, navigate to Home
     }
@@ -827,83 +848,135 @@ fun ControlScreen(navController: NavController) {
     // Assuming receivedJsonData is already a valid Map<String, Any>
     val receivedJsonData = sharedState.receivedJsonData
 
-    Scaffold(
-        topBar = { /* No topBar here, it's effectively removed */ },
-    ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .padding(16.dp)
-        ) {
-            if (receivedJsonData.isNotEmpty()) {
-                DynamicUI(receivedJsonData)
-            } else {
-                Text("Waiting for configuration...")
-            }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+    ) {
+        if (receivedJsonData.isNotEmpty()) {
+            DynamicUI(receivedJsonData, webSocketManager)
+        } else {
+            Text("Waiting for configuration...")
         }
     }
 }
 
 @Composable
-fun DynamicUI(jsonString: String) {
+fun DynamicUI(jsonString: String, webSocketManager: WebSocketManager) {
     // Deserialize JSON into UIConfig object
     val config = remember { json.decodeFromString<LinkConfig>(jsonString) }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        config.interfaceData.forEach { element ->
-            when (element.type) {
-                "button" -> ButtonElement(element)
-                "joystick" -> JoystickElement(element)
+    GridLayout { gridSize ->
+        Box(modifier = Modifier.fillMaxSize()) {
+            config.interfaceData.forEach { element ->
+                when (element.type) {
+                    "button" -> ButtonElement(element, gridSize)
+                    "joystick" -> JoystickElement(element, gridSize,
+                        onMove = { x, y ->
+                            webSocketManager?.sendMovementCommand(
+                                x,
+                                y
+                            )
+                        }
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-fun ButtonElement(element: InterfaceData) {
-    Box(modifier = Modifier
-        .absoluteOffset(x = element.position[0].dp, y = element.position[1].dp)
+fun ButtonElement(element: InterfaceData, gridSize: Pair<Float, Float>) {
+    val (cellWidth, cellHeight) = gridSize
+
+    Box(
+        modifier = Modifier
+            .absoluteOffset(
+                x = (element.position[0] * cellWidth + 2).dp,
+                y = (element.position[1] * cellHeight + 2).dp
+            )
+            .size(
+                width = (element.size[0] * cellWidth - 4).dp,
+                height = (element.size[1] * cellHeight - 4).dp
+            )
+            .padding(0.dp)
     ) {
         Button(
-            onClick = {
-                println("Command: ${element.command}") // Handle command here (e.g., send a WebSocket message or perform action)
-            },
-            colors = ButtonDefaults.buttonColors(containerColor = Color.Blue)
+            modifier = Modifier
+                .width((element.size[0] * cellWidth - 2).dp)
+                .height((element.size[0] * cellWidth - 2).dp)
+                .padding(0.dp),
+            onClick = { println("Command: ${element.command}") },
+            colors = ButtonDefaults.buttonColors(Color.Black),
+            shape = RectangleShape
         ) {
             Text(element.label, color = Color.White)
         }
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class)
 @Composable
-fun JoystickElement(element: InterfaceData) {
-    var position by remember { mutableStateOf(Pair(0f, 0f)) }
+fun JoystickElement(element: InterfaceData, gridSize: Pair<Float, Float>, onMove: (Byte, Byte) -> Unit) {
+    val configuration = LocalConfiguration.current
+    val screenWidth = configuration.screenWidthDp.dp
+    val joystickRadius = 80f
+    var offsetX by remember { mutableFloatStateOf(0f) }
+    var offsetY by remember { mutableFloatStateOf(0f) }
 
-    Box(modifier = Modifier
-        .absoluteOffset(x = element.position[0].dp, y = element.position[1].dp)
+    val (cellWidth, cellHeight) = gridSize
+
+    Box(
+        modifier = Modifier
+            .absoluteOffset(
+                x = (element.position[0] * cellWidth + 2).dp,
+                y = (element.position[1] * cellHeight + 2).dp
+            )
+            .size(
+                width = (element.size[0] * cellWidth - 4).dp,
+                height = (element.size[1] * cellHeight - 4).dp
+            )
+            .clip(RoundedCornerShape(20.dp))
+            .background(Color(0xFFB6B6B6)),
+        contentAlignment = Alignment.Center
     ) {
-        Box(
+        Canvas(
             modifier = Modifier
-                .size(100.dp)
-                .clip(CircleShape)
-                .background(Color.Gray)
-                .pointerInteropFilter { event ->
-                    when (event.action) {
-                        MotionEvent.ACTION_MOVE -> {
-                            position = Pair(event.x, event.y)
-                        }
+                .size(screenWidth, screenWidth)
+                .width((element.size[0] * cellWidth - 2).dp)
+                .height((element.size[0] * cellWidth - 2).dp)
+                .pointerInput(Unit) {
+                    detectDragGestures(
+                        onDragEnd = {
+                            offsetX = 0f
+                            offsetY = 0f
+                            onMove(0, 0) // Send (0, 0) on drag end
+                        },
+                        onDrag = { _, dragAmount ->
+                            // Update offsets while ensuring they are within bounds
+                            offsetX = (offsetX + dragAmount.x).coerceIn(
+                                -screenWidth.toPx() / 2 + joystickRadius,
+                                screenWidth.toPx() / 2 - joystickRadius
+                            )
+                            offsetY = (offsetY + dragAmount.y).coerceIn(
+                                -screenWidth.toPx() / 2 + joystickRadius,
+                                screenWidth.toPx() / 2 - joystickRadius
+                            )
 
-                        MotionEvent.ACTION_UP -> {
-                            position = Pair(0f, 0f)
+                            // Normalize the offsets to the range [-128, 127]
+                            val normalizedX = ((offsetX / (screenWidth.toPx() / 2 - joystickRadius)) * 127).toInt().coerceIn(-128, 127).toByte()
+                            val normalizedY = ((offsetY / (screenWidth.toPx() / 2 - joystickRadius)) * 127).toInt().coerceIn(-128, 127).toByte()
+
+                            // Pass normalized values to the callback
+                            onMove(normalizedX, normalizedY)
                         }
-                    }
-                    true
-                },
-            contentAlignment = Alignment.Center
+                    )
+                }
         ) {
-            Text("${position.first.toInt()}, ${position.second.toInt()}", color = Color.White, fontSize = 14.sp)
+            val canvasCenter = Offset(size.width / 2, size.height / 2)
+            drawCircle(
+                color = Color.Black,
+                radius = joystickRadius,
+                center = canvasCenter + Offset(offsetX, offsetY)
+            )
         }
     }
 }
