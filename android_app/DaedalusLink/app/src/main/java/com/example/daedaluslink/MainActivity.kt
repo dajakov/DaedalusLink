@@ -58,10 +58,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.withTimeoutOrNull
 
-private val sharedState = SharedState()
+val sharedState = SharedState()
+
+var webSocketManager = WebSocketManager()
 
 class MainActivity : ComponentActivity() {
     // Initialize ViewModel
@@ -79,8 +80,6 @@ class MainActivity : ComponentActivity() {
         actionBar?.hide()
         setContent {
             val navController = rememberNavController()
-
-            val webSocketManager by remember { mutableStateOf<WebSocketManager?>(null) }
 
             val currentDestination by navController.currentBackStackEntryAsState()
             val showBottomBar = currentDestination?.destination?.route?.let { route ->
@@ -124,11 +123,7 @@ class MainActivity : ComponentActivity() {
 
                         LoadingScreen(navController, connectConfigViewModel, configIndex, linkConfigViewModel, linkIndex)
                     }
-                    composable("control") {
-                        webSocketManager?.let {
-                            ControlScreen(navController, it)
-                        } ?: Text("Error: WebSocketManager not initialized")
-                    }
+                    composable("control") { ControlScreen(navController) }
                     composable("debug") { DebugScreen(navController) }
                     composable("settings") { SettingsScreen(navController) }
                     composable("addConnectConfig") { AddConnectConfigScreen(navController, connectConfigViewModel) }
@@ -532,11 +527,6 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
         }
     }
 
-    val webSocketManager = remember {
-        mutableStateOf<WebSocketManager?>(null)
-    }
-
-    val context = LocalContext.current
     LaunchedEffect(Unit) {
         // Step 1: Ping the IP address
         updateSteps("Pinging $ipAddress...")
@@ -555,9 +545,9 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
         // Step 2: Try to connect to WebSocket
         if (pingResult == true) {
             updateSteps("Connecting to WebSocket... ")
-            webSocketManager.value = WebSocketManager(context,
-                "ws://$ipAddress", sharedState, heartbeatFrequency,)
-            webSocketResult = webSocketManager.value!!.connectToWebSocket()
+
+            webSocketResult = webSocketManager.connectToWebSocket(
+                "ws://$ipAddress", sharedState, heartbeatFrequency)
 
             if (!webSocketResult) {
                 updateSteps("❌", true)
@@ -840,7 +830,7 @@ fun GridLayout(content: @Composable (Pair<Float, Float>) -> Unit) {
 }
 
 @Composable
-fun ControlScreen(navController: NavController, webSocketManager: WebSocketManager) {
+fun ControlScreen(navController: NavController) {
     BackHandler {
         navController.navigate("landing") // Instead of going back, navigate to Home
     }
@@ -853,7 +843,7 @@ fun ControlScreen(navController: NavController, webSocketManager: WebSocketManag
             .fillMaxSize()
     ) {
         if (receivedJsonData.isNotEmpty()) {
-            DynamicUI(receivedJsonData, webSocketManager)
+            DynamicUI(receivedJsonData)
         } else {
             Text("Waiting for configuration...")
         }
@@ -861,7 +851,7 @@ fun ControlScreen(navController: NavController, webSocketManager: WebSocketManag
 }
 
 @Composable
-fun DynamicUI(jsonString: String, webSocketManager: WebSocketManager) {
+fun DynamicUI(jsonString: String) {
     // Deserialize JSON into UIConfig object
     val config = remember { json.decodeFromString<LinkConfig>(jsonString) }
 
@@ -872,7 +862,7 @@ fun DynamicUI(jsonString: String, webSocketManager: WebSocketManager) {
                     "button" -> ButtonElement(element, gridSize)
                     "joystick" -> JoystickElement(element, gridSize,
                         onMove = { x, y ->
-                            webSocketManager?.sendMovementCommand(
+                            webSocketManager.sendMovementCommand(
                                 x,
                                 y
                             )

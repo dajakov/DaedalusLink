@@ -1,27 +1,27 @@
 package com.example.daedaluslink
 
-import android.content.Context
 import android.os.Handler
 import android.os.Looper
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.*
 import okhttp3.*
-import java.io.File
 
-class WebSocketManager(private val context: Context, private val url: String, val sharedState: SharedState, private val resendDelay: Long) {
+class WebSocketManager
+{
     private var client: OkHttpClient = OkHttpClient()
     private lateinit var webSocket: WebSocket
-    private val gson = Gson()
+
+    private var resendDelay: Long = 0L
 
     private var lastCommand: String? = null
     private var lastCommandTimestamp: Long = 0
     private var resendJob: Job? = null
 
-    suspend fun connectToWebSocket(): Boolean {
+    suspend fun connectToWebSocket(url: String, sharedState: SharedState, heartbeatFrequency: Long): Boolean {
         val request = Request.Builder().url(url).build()
         val maxMessages = 100
         val connectionResult = CompletableDeferred<Boolean>()
+
+        resendDelay = heartbeatFrequency
 
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
@@ -58,7 +58,7 @@ class WebSocketManager(private val context: Context, private val url: String, va
     fun reconnectWebSocket() {
         Handler(Looper.getMainLooper()).postDelayed({
             CoroutineScope(Dispatchers.IO).launch {
-                connectToWebSocket()
+//                connectToWebSocket()
             }
         }, 5000)
     }
