@@ -527,6 +527,19 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
         }
     }
 
+    // Function to perform a ping to an IP
+    suspend fun performPing(ipAddress: String): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                val cleanIp = ipAddress.substringBefore(":") // ✅ Remove port if present
+                val address = InetAddress.getByName(cleanIp)
+                address.isReachable(2000) // ✅ Timeout: 2 seconds
+            } catch (e: IOException) {
+                false
+            }
+        }
+    }
+
     LaunchedEffect(Unit) {
         // Step 1: Ping the IP address
         updateSteps("Pinging $ipAddress...")
@@ -634,18 +647,7 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
     }
 }
 
-// Function to perform a ping to an IP
-suspend fun performPing(ipAddress: String): Boolean {
-    return withContext(Dispatchers.IO) {
-        try {
-            val cleanIp = ipAddress.substringBefore(":") // ✅ Remove port if present
-            val address = InetAddress.getByName(cleanIp)
-            address.isReachable(2000) // ✅ Timeout: 2 seconds
-        } catch (e: IOException) {
-            false
-        }
-    }
-}
+
 
 @Composable
 fun AddConnectConfigScreen(navController: NavController, viewModel: ConnectConfigViewModel) {
@@ -832,10 +834,10 @@ fun GridLayout(content: @Composable (Pair<Float, Float>) -> Unit) {
 @Composable
 fun ControlScreen(navController: NavController) {
     BackHandler {
-        navController.navigate("landing") // Instead of going back, navigate to Home
+        webSocketManager.disconnect()
+        navController.navigate("landing")
     }
 
-    // Assuming receivedJsonData is already a valid Map<String, Any>
     val receivedJsonData = sharedState.receivedJsonData
 
     Column(
@@ -845,14 +847,14 @@ fun ControlScreen(navController: NavController) {
         if (receivedJsonData.isNotEmpty()) {
             DynamicUI(receivedJsonData)
         } else {
-            Text("Waiting for configuration...")
+            Text("No JSON file received!")
         }
     }
 }
 
 @Composable
 fun DynamicUI(jsonString: String) {
-    // Deserialize JSON into UIConfig object
+    // Deserialize JSON into LinkConfig object
     val config = remember { json.decodeFromString<LinkConfig>(jsonString) }
 
     GridLayout { gridSize ->
@@ -895,7 +897,7 @@ fun ButtonElement(element: InterfaceData, gridSize: Pair<Float, Float>) {
                 .width((element.size[0] * cellWidth - 2).dp)
                 .height((element.size[0] * cellWidth - 2).dp)
                 .padding(0.dp),
-            onClick = { println("Command: ${element.command}") },
+            onClick = { println("Command: ${element.pressCommand}") },
             colors = ButtonDefaults.buttonColors(Color.Black),
             shape = RectangleShape
         ) {
@@ -925,7 +927,7 @@ fun JoystickElement(element: InterfaceData, gridSize: Pair<Float, Float>, onMove
                 height = (element.size[1] * cellHeight - 4).dp
             )
             .clip(RoundedCornerShape(20.dp))
-            .background(Color(0xFFB6B6B6)),
+            .background(Color(0xFFC7C7C7)),
         contentAlignment = Alignment.Center
     ) {
         Canvas(

@@ -10,7 +10,7 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.serialization.json.Json
 
-@Database(entities = [LinkConfig::class], version = 4, exportSchema = false)
+@Database(entities = [LinkConfig::class], version = 6, exportSchema = false)
 @TypeConverters(InterfaceDataConverter::class)
 abstract class LinkConfigDatabase : RoomDatabase() {
     abstract fun linkConfigDao(): LinkConfigDao
