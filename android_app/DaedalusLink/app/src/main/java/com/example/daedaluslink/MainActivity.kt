@@ -1,6 +1,7 @@
 package com.example.daedaluslink
 
 import android.annotation.SuppressLint
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -59,6 +60,17 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
 import kotlinx.coroutines.withTimeoutOrNull
+import co.yml.charts.axis.AxisData
+import co.yml.charts.common.model.Point
+import co.yml.charts.ui.linechart.LineChart
+import co.yml.charts.ui.linechart.model.IntersectionPoint
+import co.yml.charts.ui.linechart.model.Line
+import co.yml.charts.ui.linechart.model.LineChartData
+import co.yml.charts.ui.linechart.model.LinePlotData
+import co.yml.charts.ui.linechart.model.LineStyle
+import co.yml.charts.ui.linechart.model.SelectionHighlightPoint
+import co.yml.charts.ui.linechart.model.SelectionHighlightPopUp
+import co.yml.charts.ui.linechart.model.ShadowUnderLine
 
 val sharedState = SharedState()
 
@@ -840,9 +852,131 @@ fun ControlScreen(navController: NavController) {
 
     val receivedJsonData = sharedState.receivedJsonData
 
+    @Composable
+    fun ButtonElement(element: InterfaceData, gridSize: Pair<Float, Float>) {
+        val (cellWidth, cellHeight) = gridSize
+
+        Box(
+            modifier = Modifier
+                .absoluteOffset(
+                    x = (element.position[0] * cellWidth + 2).dp,
+                    y = (element.position[1] * cellHeight + 2).dp
+                )
+                .size(
+                    width = (element.size[0] * cellWidth - 4).dp,
+                    height = (element.size[1] * cellHeight - 4).dp
+                )
+                .padding(0.dp)
+        ) {
+            Button(
+                modifier = Modifier
+                    .width((element.size[0] * cellWidth - 2).dp)
+                    .height((element.size[0] * cellWidth - 2).dp)
+                    .padding(0.dp),
+                onClick = { println("Command: ${element.pressCommand}") },
+                colors = ButtonDefaults.buttonColors(Color.Black),
+                shape = RectangleShape
+            ) {
+                Text(element.label, color = Color.White)
+            }
+        }
+    }
+
+    @Composable
+    fun JoystickElement(element: InterfaceData, gridSize: Pair<Float, Float>, onMove: (Byte, Byte) -> Unit) {
+        val configuration = LocalConfiguration.current
+        val screenWidth = configuration.screenWidthDp.dp
+        val joystickRadius = 80f
+        var offsetX by remember { mutableFloatStateOf(0f) }
+        var offsetY by remember { mutableFloatStateOf(0f) }
+
+        val (cellWidth, cellHeight) = gridSize
+
+        Box(
+            modifier = Modifier
+                .absoluteOffset(
+                    x = (element.position[0] * cellWidth + 2).dp,
+                    y = (element.position[1] * cellHeight + 2).dp
+                )
+                .size(
+                    width = (element.size[0] * cellWidth - 4).dp,
+                    height = (element.size[1] * cellHeight - 4).dp
+                )
+                .clip(RoundedCornerShape(20.dp))
+                .background(Color(0xFFC7C7C7)),
+            contentAlignment = Alignment.Center
+        ) {
+            Canvas(
+                modifier = Modifier
+                    .size(screenWidth, screenWidth)
+                    .width((element.size[0] * cellWidth - 2).dp)
+                    .height((element.size[0] * cellWidth - 2).dp)
+                    .pointerInput(Unit) {
+                        detectDragGestures(
+                            onDragEnd = {
+                                offsetX = 0f
+                                offsetY = 0f
+                                onMove(0, 0) // Send (0, 0) on drag end
+                            },
+                            onDrag = { _, dragAmount ->
+                                // Update offsets while ensuring they are within bounds
+                                offsetX = (offsetX + dragAmount.x).coerceIn(
+                                    -screenWidth.toPx() / 2 + joystickRadius,
+                                    screenWidth.toPx() / 2 - joystickRadius
+                                )
+                                offsetY = (offsetY + dragAmount.y).coerceIn(
+                                    -screenWidth.toPx() / 2 + joystickRadius,
+                                    screenWidth.toPx() / 2 - joystickRadius
+                                )
+
+                                // Normalize the offsets to the range [-128, 127]
+                                val normalizedX = ((offsetX / (screenWidth.toPx() / 2 - joystickRadius)) * 127).toInt().coerceIn(-128, 127).toByte()
+                                val normalizedY = ((offsetY / (screenWidth.toPx() / 2 - joystickRadius)) * 127).toInt().coerceIn(-128, 127).toByte()
+
+                                // Pass normalized values to the callback
+                                onMove(normalizedX, normalizedY)
+                            }
+                        )
+                    }
+            ) {
+                val canvasCenter = Offset(size.width / 2, size.height / 2)
+                drawCircle(
+                    color = Color.Black,
+                    radius = joystickRadius,
+                    center = canvasCenter + Offset(offsetX, offsetY)
+                )
+            }
+        }
+    }
+
+    @Composable
+    fun DynamicUI(jsonString: String) {
+        // Deserialize JSON into LinkConfig object
+        val config = remember { json.decodeFromString<LinkConfig>(jsonString) }
+
+        GridLayout { gridSize ->
+            Box(modifier = Modifier.fillMaxSize()) {
+                config.interfaceData.forEach { element ->
+                    when (element.type) {
+                        "button" -> ButtonElement(element, gridSize)
+                        "joystick" -> JoystickElement(element, gridSize,
+                            onMove = { x, y ->
+                                webSocketManager.sendMovementCommand(
+                                    x,
+                                    y
+                                )
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .background(Color.White)
     ) {
         if (receivedJsonData.isNotEmpty()) {
             DynamicUI(receivedJsonData)
@@ -852,131 +986,12 @@ fun ControlScreen(navController: NavController) {
     }
 }
 
-@Composable
-fun DynamicUI(jsonString: String) {
-    // Deserialize JSON into LinkConfig object
-    val config = remember { json.decodeFromString<LinkConfig>(jsonString) }
-
-    GridLayout { gridSize ->
-        Box(modifier = Modifier.fillMaxSize()) {
-            config.interfaceData.forEach { element ->
-                when (element.type) {
-                    "button" -> ButtonElement(element, gridSize)
-                    "joystick" -> JoystickElement(element, gridSize,
-                        onMove = { x, y ->
-                            webSocketManager.sendMovementCommand(
-                                x,
-                                y
-                            )
-                        }
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun ButtonElement(element: InterfaceData, gridSize: Pair<Float, Float>) {
-    val (cellWidth, cellHeight) = gridSize
-
-    Box(
-        modifier = Modifier
-            .absoluteOffset(
-                x = (element.position[0] * cellWidth + 2).dp,
-                y = (element.position[1] * cellHeight + 2).dp
-            )
-            .size(
-                width = (element.size[0] * cellWidth - 4).dp,
-                height = (element.size[1] * cellHeight - 4).dp
-            )
-            .padding(0.dp)
-    ) {
-        Button(
-            modifier = Modifier
-                .width((element.size[0] * cellWidth - 2).dp)
-                .height((element.size[0] * cellWidth - 2).dp)
-                .padding(0.dp),
-            onClick = { println("Command: ${element.pressCommand}") },
-            colors = ButtonDefaults.buttonColors(Color.Black),
-            shape = RectangleShape
-        ) {
-            Text(element.label, color = Color.White)
-        }
-    }
-}
-
-@Composable
-fun JoystickElement(element: InterfaceData, gridSize: Pair<Float, Float>, onMove: (Byte, Byte) -> Unit) {
-    val configuration = LocalConfiguration.current
-    val screenWidth = configuration.screenWidthDp.dp
-    val joystickRadius = 80f
-    var offsetX by remember { mutableFloatStateOf(0f) }
-    var offsetY by remember { mutableFloatStateOf(0f) }
-
-    val (cellWidth, cellHeight) = gridSize
-
-    Box(
-        modifier = Modifier
-            .absoluteOffset(
-                x = (element.position[0] * cellWidth + 2).dp,
-                y = (element.position[1] * cellHeight + 2).dp
-            )
-            .size(
-                width = (element.size[0] * cellWidth - 4).dp,
-                height = (element.size[1] * cellHeight - 4).dp
-            )
-            .clip(RoundedCornerShape(20.dp))
-            .background(Color(0xFFC7C7C7)),
-        contentAlignment = Alignment.Center
-    ) {
-        Canvas(
-            modifier = Modifier
-                .size(screenWidth, screenWidth)
-                .width((element.size[0] * cellWidth - 2).dp)
-                .height((element.size[0] * cellWidth - 2).dp)
-                .pointerInput(Unit) {
-                    detectDragGestures(
-                        onDragEnd = {
-                            offsetX = 0f
-                            offsetY = 0f
-                            onMove(0, 0) // Send (0, 0) on drag end
-                        },
-                        onDrag = { _, dragAmount ->
-                            // Update offsets while ensuring they are within bounds
-                            offsetX = (offsetX + dragAmount.x).coerceIn(
-                                -screenWidth.toPx() / 2 + joystickRadius,
-                                screenWidth.toPx() / 2 - joystickRadius
-                            )
-                            offsetY = (offsetY + dragAmount.y).coerceIn(
-                                -screenWidth.toPx() / 2 + joystickRadius,
-                                screenWidth.toPx() / 2 - joystickRadius
-                            )
-
-                            // Normalize the offsets to the range [-128, 127]
-                            val normalizedX = ((offsetX / (screenWidth.toPx() / 2 - joystickRadius)) * 127).toInt().coerceIn(-128, 127).toByte()
-                            val normalizedY = ((offsetY / (screenWidth.toPx() / 2 - joystickRadius)) * 127).toInt().coerceIn(-128, 127).toByte()
-
-                            // Pass normalized values to the callback
-                            onMove(normalizedX, normalizedY)
-                        }
-                    )
-                }
-        ) {
-            val canvasCenter = Offset(size.width / 2, size.height / 2)
-            drawCircle(
-                color = Color.Black,
-                radius = joystickRadius,
-                center = canvasCenter + Offset(offsetX, offsetY)
-            )
-        }
-    }
-}
-
-
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @Composable
 fun DebugScreen(navController: NavController) {
+    val pointsData: List<Point> =
+        listOf(Point(0f, 40f), Point(1f, 90f), Point(2f, 0f), Point(3f, 60f), Point(4f, 10f))
+
     BackHandler {
         navController.navigate("landing") // Instead of going back, navigate to Home
     }
@@ -986,11 +1001,55 @@ fun DebugScreen(navController: NavController) {
     ) {
         Column(modifier = Modifier
             .fillMaxSize()
+            .background(Color.White)
             .padding(16.dp)) {
-            Button(onClick = { /* Do something */ }) {
-                Text("Dashboard Button")
-            }
+            RpmChartScreen(pointsData)
         }
+    }
+}
+
+@Composable
+fun RpmChartScreen(rpmData: List<Point>) {
+    val xAxisData = AxisData.Builder()
+        .axisStepSize(100.dp)
+        .steps(rpmData.size - 1)
+        .labelData { i -> i.toString() }
+        .labelAndAxisLinePadding(15.dp)
+        .build()
+
+    val yAxisData = AxisData.Builder()
+        .steps(100)
+        .backgroundColor(Color.Red)
+        .labelAndAxisLinePadding(20.dp)
+        .build()
+
+    val lineChartData = LineChartData(
+        linePlotData = LinePlotData(
+            lines = listOf(
+                Line(dataPoints = rpmData,
+                    LineStyle(),
+                    IntersectionPoint(),
+                    SelectionHighlightPoint(),
+                    ShadowUnderLine(),
+                    SelectionHighlightPopUp()
+                )
+            )
+        ),
+        xAxisData = xAxisData,
+        yAxisData = yAxisData
+    )
+
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Text("Robot RPM", style = MaterialTheme.typography.headlineSmall)
+        Spacer(modifier = Modifier.height(16.dp))
+        LineChart(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(250.dp),
+            lineChartData = lineChartData
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+//        Text("Latest RPM: ${rpmData.lastOrNull()?.toInt() ?: "N/A"}")
     }
 }
 
