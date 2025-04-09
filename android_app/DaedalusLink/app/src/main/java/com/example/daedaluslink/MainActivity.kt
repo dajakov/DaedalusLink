@@ -63,6 +63,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import co.yml.charts.axis.AxisData
 import co.yml.charts.common.model.Point
 import co.yml.charts.ui.linechart.LineChart
+import co.yml.charts.ui.linechart.model.GridLines
 import co.yml.charts.ui.linechart.model.IntersectionPoint
 import co.yml.charts.ui.linechart.model.Line
 import co.yml.charts.ui.linechart.model.LineChartData
@@ -71,6 +72,7 @@ import co.yml.charts.ui.linechart.model.LineStyle
 import co.yml.charts.ui.linechart.model.SelectionHighlightPoint
 import co.yml.charts.ui.linechart.model.SelectionHighlightPopUp
 import co.yml.charts.ui.linechart.model.ShadowUnderLine
+import co.yml.charts.common.extensions.formatToSinglePrecision
 
 val sharedState = SharedState()
 
@@ -150,7 +152,8 @@ val allIcons = listOf(
     IconItem.MaterialIcon(Icons.Default.Info),
     IconItem.MaterialIcon(Icons.Default.PlayArrow),
     IconItem.CustomIcon(R.drawable.r2d2),
-    IconItem.CustomIcon(R.drawable.hexapod)
+    IconItem.CustomIcon(R.drawable.hexapod),
+    IconItem.CustomIcon(R.drawable.siggi)
     // Add more icons as needed
 )
 
@@ -163,10 +166,11 @@ object IconMapper {
     // Mapping from icon ID to IconItem
     fun getIconById(iconId: String): IconItem {
         return when (iconId) {
-            "info" -> IconItem.MaterialIcon(Icons.Default.Info) // Example of mapping an ID to a Material icon
-            "PlayArrow" -> IconItem.MaterialIcon(Icons.Default.PlayArrow) // Another example for MaterialIcon
-            "r2d2" -> IconItem.CustomIcon(R.drawable.r2d2) // Example of mapping an ID to a custom icon
-            "hexapod" -> IconItem.CustomIcon(R.drawable.hexapod) // Another example for custom icons
+            "info" -> IconItem.MaterialIcon(Icons.Default.Info)
+            "PlayArrow" -> IconItem.MaterialIcon(Icons.Default.PlayArrow)
+            "r2d2" -> IconItem.CustomIcon(R.drawable.r2d2)
+            "hexapod" -> IconItem.CustomIcon(R.drawable.hexapod)
+            "siggi" -> IconItem.CustomIcon(R.drawable.siggi)
             else -> IconItem.MaterialIcon(Icons.Default.Warning) // Default icon if the ID is unrecognized
         }
     }
@@ -182,6 +186,7 @@ object IconMapper {
             is IconItem.CustomIcon -> when (iconItem.resourceId) {
                 R.drawable.r2d2 -> "r2d2"
                 R.drawable.hexapod -> "hexapod"
+                R.drawable.siggi -> "siggi"
                 else -> "default"
             }
         }
@@ -1012,16 +1017,24 @@ fun DebugScreen(navController: NavController) {
 fun RpmChartScreen(rpmData: List<Point>) {
     val xAxisData = AxisData.Builder()
         .axisStepSize(100.dp)
+        .backgroundColor(Color.White)
         .steps(rpmData.size - 1)
         .labelData { i -> i.toString() }
         .labelAndAxisLinePadding(15.dp)
         .build()
 
+    val steps = 5
     val yAxisData = AxisData.Builder()
-        .steps(100)
-        .backgroundColor(Color.Red)
+        .steps(steps)
+        .backgroundColor(Color.White)
         .labelAndAxisLinePadding(20.dp)
-        .build()
+        .labelData { i ->
+            // Add yMin to get the negative axis values to the scale
+            val yMin = rpmData.minOf { it.y }
+            val yMax = rpmData.maxOf { it.y }
+            val yScale = (yMax - yMin) / steps
+            ((i * yScale) + yMin).formatToSinglePrecision()
+        }.build()
 
     val lineChartData = LineChartData(
         linePlotData = LinePlotData(
@@ -1036,7 +1049,9 @@ fun RpmChartScreen(rpmData: List<Point>) {
             )
         ),
         xAxisData = xAxisData,
-        yAxisData = yAxisData
+        yAxisData = yAxisData,
+        gridLines = GridLines(),
+        backgroundColor = Color.White
     )
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {

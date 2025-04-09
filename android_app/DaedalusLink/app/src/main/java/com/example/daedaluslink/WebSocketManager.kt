@@ -4,6 +4,8 @@ import android.os.Handler
 import android.os.Looper
 import kotlinx.coroutines.*
 import okhttp3.*
+import org.json.JSONException
+import org.json.JSONObject
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.pow
 
@@ -105,10 +107,28 @@ class WebSocketManager {
 
     private fun processReceivedMessage(message: String, sharedState: SharedState) {
         try {
-            sharedState.receivedJsonData = message
-            sharedState.isJsonReceived = true
-        } catch (e: Exception) {
-            println("Failed to process message: ${e.message}")
+            val json = JSONObject(message)
+            val type = json.getString("type")
+            val payload = json.get("payload")
+
+            when (type) {
+                "config" -> {
+                    sharedState.receivedJsonData = payload.toString()
+                    sharedState.isJsonReceived = true
+                }
+                "debug" -> {
+                    sharedState.receivedDebugData += payload.toString()
+                    println("Received debug: $payload")
+                }
+                "ack" -> {
+                    println("Received ACK: $payload")
+                }
+                else -> {
+                    println("Unknown type: $type")
+                }
+            }
+        } catch (e: JSONException) {
+            println("Failed to parse JSON: ${e.message}")
         }
     }
 }
@@ -118,11 +138,13 @@ class SharedState {
     var receivedMessages: List<String> = emptyList()
     var receivedJsonData: String = ""
     var isJsonReceived: Boolean = false
+    var receivedDebugData: List<String> = emptyList()
 
     fun clear() {
         isConnected = false
         receivedMessages = emptyList()
         receivedJsonData = ""
         isJsonReceived = false
+        receivedDebugData = emptyList()
     }
 }
