@@ -19,7 +19,8 @@ class WebSocketManager {
     private var reconnectAttempts = 0
     private val isReconnecting = AtomicBoolean(false)
 
-    suspend fun connectToWebSocket(url: String, sharedState: SharedState, heartbeatFrequency: Long): Boolean {
+    suspend fun connectToWebSocket(url: String, sharedState: SharedState, heartbeatFrequency: Long,
+                                   debugViewModel: DebugViewModel): Boolean {
         val request = Request.Builder().url(url).build()
         val connectionResult = CompletableDeferred<Boolean>()
         resendDelay = ((1F / heartbeatFrequency.toFloat()) * 1000F).toLong()
@@ -62,7 +63,7 @@ class WebSocketManager {
         reconnectAttempts++
         Handler(Looper.getMainLooper()).postDelayed({
             CoroutineScope(Dispatchers.IO).launch {
-                connectToWebSocket(url, sharedState, 1L)
+                connectToWebSocket(url, sharedState, 1L, DebugViewModel())
             }
         }, delayTime)
     }
@@ -105,7 +106,11 @@ class WebSocketManager {
         }
     }
 
-    private fun processReceivedMessage(message: String, sharedState: SharedState) {
+    private fun processReceivedMessage(
+        message: String,
+        sharedState: SharedState,
+        debugViewModel: DebugViewModel? = null
+    ) {
         try {
             val json = JSONObject(message)
             val type = json.getString("type")
@@ -115,14 +120,27 @@ class WebSocketManager {
                 "config" -> {
                     sharedState.receivedJsonData = payload.toString()
                     sharedState.isJsonReceived = true
+                    println("Received config: $payload")
                 }
+
                 "debug" -> {
-                    sharedState.receivedDebugData += payload.toString()
-                    println("Received debug: $payload")
+                    if (payload is JSONObject) {
+                        payload.keys().forEach { key ->
+                            val value = payload.optDouble(key, Double.NaN).toFloat()
+                            if (!value.isNaN()) {
+                                debugViewModel?.addDataPoint(key, value)
+                            }
+                        }
+                        println("Received debug: $payload")
+                    } else {
+                        println("Debug payload is not a JSONObject")
+                    }
                 }
+
                 "ack" -> {
                     println("Received ACK: $payload")
                 }
+
                 else -> {
                     println("Unknown type: $type")
                 }
@@ -138,13 +156,11 @@ class SharedState {
     var receivedMessages: List<String> = emptyList()
     var receivedJsonData: String = ""
     var isJsonReceived: Boolean = false
-    var receivedDebugData: List<String> = emptyList()
 
     fun clear() {
         isConnected = false
         receivedMessages = emptyList()
         receivedJsonData = ""
         isJsonReceived = false
-        receivedDebugData = emptyList()
     }
 }

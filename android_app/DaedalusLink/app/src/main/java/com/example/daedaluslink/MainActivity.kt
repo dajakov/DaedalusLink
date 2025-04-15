@@ -57,6 +57,7 @@ import java.net.InetAddress
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
 import kotlinx.coroutines.withTimeoutOrNull
@@ -577,7 +578,8 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
             updateSteps("Connecting to WebSocket... ")
 
             webSocketResult = webSocketManager.connectToWebSocket(
-                "ws://$ipAddress", sharedState, heartbeatFrequency)
+                "ws://$ipAddress", sharedState, heartbeatFrequency, DebugViewModel()
+            )
 
             if (!webSocketResult) {
                 updateSteps("❌", true)
@@ -994,44 +996,57 @@ fun ControlScreen(navController: NavController) {
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @Composable
 fun DebugScreen(navController: NavController) {
-    val pointsData: List<Point> =
-        listOf(Point(0f, 40f), Point(1f, 90f), Point(2f, 0f), Point(3f, 60f), Point(4f, 10f))
+    val debugData = DebugViewModel().debugData
 
     BackHandler {
-        navController.navigate("landing") // Instead of going back, navigate to Home
+        navController.navigate("landing")
     }
 
-    Scaffold(
-        topBar = { /* No topBar here, it's effectively removed */ },
-    ) {
-        Column(modifier = Modifier
-            .fillMaxSize()
-            .background(Color.White)
-            .padding(16.dp)) {
-            RpmChartScreen(pointsData)
+    Scaffold {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp)
+        ) {
+            Text("Debug Charts", style = MaterialTheme.typography.headlineMedium)
+            Spacer(modifier = Modifier.height(16.dp))
+
+            if (debugData.isEmpty()) {
+                Text("Waiting for debug data...")
+            } else {
+                debugData.forEach { (key, points) ->
+                    Text(text = key.replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.titleMedium)
+                    RpmChartScreen(rpmData = points)
+                    Spacer(modifier = Modifier.height(24.dp))
+                }
+            }
         }
     }
 }
 
+
 @Composable
 fun RpmChartScreen(rpmData: List<Point>) {
+    if (rpmData.isEmpty()) return
+
+    val steps = 5
+    val yMin = rpmData.minOf { it.y }
+    val yMax = rpmData.maxOf { it.y }
+
     val xAxisData = AxisData.Builder()
-        .axisStepSize(100.dp)
+        .axisStepSize(40.dp)
         .backgroundColor(Color.White)
         .steps(rpmData.size - 1)
         .labelData { i -> i.toString() }
-        .labelAndAxisLinePadding(15.dp)
+        .labelAndAxisLinePadding(10.dp)
         .build()
 
-    val steps = 5
     val yAxisData = AxisData.Builder()
         .steps(steps)
         .backgroundColor(Color.White)
-        .labelAndAxisLinePadding(20.dp)
+        .labelAndAxisLinePadding(10.dp)
         .labelData { i ->
-            // Add yMin to get the negative axis values to the scale
-            val yMin = rpmData.minOf { it.y }
-            val yMax = rpmData.maxOf { it.y }
             val yScale = (yMax - yMin) / steps
             ((i * yScale) + yMin).formatToSinglePrecision()
         }.build()
@@ -1039,7 +1054,8 @@ fun RpmChartScreen(rpmData: List<Point>) {
     val lineChartData = LineChartData(
         linePlotData = LinePlotData(
             lines = listOf(
-                Line(dataPoints = rpmData,
+                Line(
+                    dataPoints = rpmData,
                     LineStyle(),
                     IntersectionPoint(),
                     SelectionHighlightPoint(),
@@ -1054,19 +1070,14 @@ fun RpmChartScreen(rpmData: List<Point>) {
         backgroundColor = Color.White
     )
 
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Text("Robot RPM", style = MaterialTheme.typography.headlineSmall)
-        Spacer(modifier = Modifier.height(16.dp))
-        LineChart(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(250.dp),
-            lineChartData = lineChartData
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-//        Text("Latest RPM: ${rpmData.lastOrNull()?.toInt() ?: "N/A"}")
-    }
+    LineChart(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(200.dp),
+        lineChartData = lineChartData
+    )
 }
+
 
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @Composable
