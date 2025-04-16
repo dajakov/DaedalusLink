@@ -38,7 +38,7 @@ class WebSocketManager {
 
             override fun onMessage(webSocket: WebSocket, text: String) {
                 sharedState.receivedMessages = (sharedState.receivedMessages + text).takeLast(100)
-                processReceivedMessage(text, sharedState)
+                processReceivedMessage(text, sharedState, debugViewModel)
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
@@ -109,7 +109,7 @@ class WebSocketManager {
     private fun processReceivedMessage(
         message: String,
         sharedState: SharedState,
-        debugViewModel: DebugViewModel? = null
+        debugViewModel: DebugViewModel
     ) {
         try {
             val json = JSONObject(message)
@@ -128,7 +128,7 @@ class WebSocketManager {
                         payload.keys().forEach { key ->
                             val value = payload.optDouble(key, Double.NaN).toFloat()
                             if (!value.isNaN()) {
-                                debugViewModel?.addDataPoint(key, value)
+                                debugViewModel.addDataPoint(key, value)
                             }
                         }
                         println("Received debug: $payload")

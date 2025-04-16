@@ -1,7 +1,6 @@
 package com.example.daedaluslink
 
 import android.annotation.SuppressLint
-import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -83,6 +82,7 @@ class MainActivity : ComponentActivity() {
     // Initialize ViewModel
     private val connectConfigViewModel: ConnectConfigViewModel by viewModels()
     private val linkConfigViewModel: LinkConfigViewModel by viewModels()
+    private val debugViewModel: DebugViewModel by viewModels()
 
     @SuppressLint("UnusedMaterialScaffoldPaddingParameter", "UnusedMaterial3ScaffoldPaddingParameter")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -136,10 +136,10 @@ class MainActivity : ComponentActivity() {
                         val configIndex = backStackEntry.arguments?.getString("configIndex")?.toIntOrNull() ?: 0
                         val linkIndex = backStackEntry.arguments?.getString("linkIndex")?.toIntOrNull() ?: 0
 
-                        LoadingScreen(navController, connectConfigViewModel, configIndex, linkConfigViewModel, linkIndex)
+                        LoadingScreen(navController, connectConfigViewModel, configIndex, linkConfigViewModel, linkIndex, debugViewModel)
                     }
                     composable("control") { ControlScreen(navController) }
-                    composable("debug") { DebugScreen(navController) }
+                    composable("debug") { DebugScreen(navController, debugViewModel) }
                     composable("settings") { SettingsScreen(navController) }
                     composable("addConnectConfig") { AddConnectConfigScreen(navController, connectConfigViewModel) }
                 }
@@ -506,7 +506,8 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
 
 @Composable
 fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectConfigViewModel,
-                  configIndex: Int, linkConfigViewModel: LinkConfigViewModel, linkIndex: Int) {
+                  configIndex: Int, linkConfigViewModel: LinkConfigViewModel, linkIndex: Int,
+                  debugViewModel: DebugViewModel) {
     BackHandler { }
 
     val connectConfigs by connectConfigViewModel.allConfigs.collectAsState(initial = emptyList())
@@ -578,7 +579,7 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
             updateSteps("Connecting to WebSocket... ")
 
             webSocketResult = webSocketManager.connectToWebSocket(
-                "ws://$ipAddress", sharedState, heartbeatFrequency, DebugViewModel()
+                "ws://$ipAddress", sharedState, heartbeatFrequency, debugViewModel
             )
 
             if (!webSocketResult) {
@@ -665,8 +666,6 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
         }
     }
 }
-
-
 
 @Composable
 fun AddConnectConfigScreen(navController: NavController, viewModel: ConnectConfigViewModel) {
@@ -995,8 +994,8 @@ fun ControlScreen(navController: NavController) {
 
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @Composable
-fun DebugScreen(navController: NavController) {
-    val debugData = DebugViewModel().debugData
+fun DebugScreen(navController: NavController, debugViewModel: DebugViewModel) {
+    val debugData = debugViewModel.debugData
 
     BackHandler {
         navController.navigate("landing")
@@ -1016,15 +1015,16 @@ fun DebugScreen(navController: NavController) {
                 Text("Waiting for debug data...")
             } else {
                 debugData.forEach { (key, points) ->
-                    Text(text = key.replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.titleMedium)
-                    RpmChartScreen(rpmData = points)
-                    Spacer(modifier = Modifier.height(24.dp))
+                    if (points.isNotEmpty()) {
+                        Text(text = key.replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.titleMedium)
+                        RpmChartScreen(rpmData = points)
+                        Spacer(modifier = Modifier.height(24.dp))
+                    }
                 }
             }
         }
     }
 }
-
 
 @Composable
 fun RpmChartScreen(rpmData: List<Point>) {
@@ -1033,34 +1033,37 @@ fun RpmChartScreen(rpmData: List<Point>) {
     val steps = 5
     val yMin = rpmData.minOf { it.y }
     val yMax = rpmData.maxOf { it.y }
-
-    val xAxisData = AxisData.Builder()
-        .axisStepSize(40.dp)
-        .backgroundColor(Color.White)
-        .steps(rpmData.size - 1)
-        .labelData { i -> i.toString() }
-        .labelAndAxisLinePadding(10.dp)
-        .build()
+    val yRange = yMax - yMin
+    val safeRange = if (yRange == 0f) 1f else yRange // avoid division by zero
 
     val yAxisData = AxisData.Builder()
         .steps(steps)
         .backgroundColor(Color.White)
-        .labelAndAxisLinePadding(10.dp)
+        .labelAndAxisLinePadding(20.dp)
         .labelData { i ->
-            val yScale = (yMax - yMin) / steps
+            val yScale = safeRange / steps
             ((i * yScale) + yMin).formatToSinglePrecision()
-        }.build()
+        }
+        .build()
+
+    val xAxisData = AxisData.Builder()
+        .axisStepSize(100.dp)
+        .backgroundColor(Color.White)
+        .steps(rpmData.size - 1)
+        .labelData { "" } // Empty string hides the labels
+        .labelAndAxisLinePadding(0.dp)
+        .build()
 
     val lineChartData = LineChartData(
         linePlotData = LinePlotData(
             lines = listOf(
                 Line(
                     dataPoints = rpmData,
-                    LineStyle(),
-                    IntersectionPoint(),
-                    SelectionHighlightPoint(),
-                    ShadowUnderLine(),
-                    SelectionHighlightPopUp()
+                    lineStyle = LineStyle(),
+                    intersectionPoint = IntersectionPoint(),
+                    selectionHighlightPoint = SelectionHighlightPoint(),
+                    shadowUnderLine = ShadowUnderLine(),
+                    selectionHighlightPopUp = SelectionHighlightPopUp()
                 )
             )
         ),
@@ -1070,12 +1073,14 @@ fun RpmChartScreen(rpmData: List<Point>) {
         backgroundColor = Color.White
     )
 
-    LineChart(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(200.dp),
-        lineChartData = lineChartData
-    )
+    Column(Modifier.fillMaxWidth().padding(8.dp)) {
+        LineChart(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(250.dp),
+            lineChartData = lineChartData
+        )
+    }
 }
 
 
