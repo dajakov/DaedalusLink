@@ -499,7 +499,7 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
                 .padding(bottom = 16.dp)
         ) {
             Text(
-                text = "1.0.0-dev", // Dynamic version text can go here
+                text = "1.0.0-alpha", // Dynamic version text can go here
                 color = Color.Gray,  // Grayed-out text
                 fontSize = 12.sp,     // Small font size
                 modifier = Modifier
