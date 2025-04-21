@@ -2,6 +2,7 @@ package com.example.daedaluslink
 
 import android.annotation.SuppressLint
 import android.os.Bundle
+import android.view.MotionEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
@@ -57,8 +58,10 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.pointerInteropFilter
 import kotlinx.coroutines.withTimeoutOrNull
 import co.yml.charts.axis.AxisData
 import co.yml.charts.common.model.Point
@@ -73,6 +76,8 @@ import co.yml.charts.ui.linechart.model.SelectionHighlightPoint
 import co.yml.charts.ui.linechart.model.SelectionHighlightPopUp
 import co.yml.charts.ui.linechart.model.ShadowUnderLine
 import co.yml.charts.common.extensions.formatToSinglePrecision
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 
 val sharedState = SharedState()
 
@@ -849,6 +854,7 @@ fun GridLayout(content: @Composable (Pair<Float, Float>) -> Unit) {
     }
 }
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun ControlScreen(navController: NavController) {
     BackHandler {
@@ -859,8 +865,23 @@ fun ControlScreen(navController: NavController) {
     val receivedJsonData = sharedState.receivedJsonData
 
     @Composable
-    fun ButtonElement(element: InterfaceData, gridSize: Pair<Float, Float>) {
+    fun ButtonElement(
+        element: InterfaceData,
+        gridSize: Pair<Float, Float>,
+        onPress: (String) -> Unit,
+        onRelease: (String) -> Unit
+    ) {
         val (cellWidth, cellHeight) = gridSize
+        val interactionSource = remember { MutableInteractionSource() }
+        val isPressed by interactionSource.collectIsPressedAsState()
+
+        LaunchedEffect(isPressed) {
+            if (isPressed) {
+                onPress(element.pressCommand)
+            } else {
+                onRelease(element.pressCommand)
+            }
+        }
 
         Box(
             modifier = Modifier
@@ -875,11 +896,11 @@ fun ControlScreen(navController: NavController) {
                 .padding(0.dp)
         ) {
             Button(
+                onClick = {}, // handle press/release manually
+                interactionSource = interactionSource,
                 modifier = Modifier
-                    .width((element.size[0] * cellWidth - 2).dp)
-                    .height((element.size[0] * cellWidth - 2).dp)
+                    .fillMaxSize()
                     .padding(0.dp),
-                onClick = { println("Command: ${element.pressCommand}") },
                 colors = ButtonDefaults.buttonColors(Color.Black),
                 shape = RectangleShape
             ) {
@@ -964,7 +985,12 @@ fun ControlScreen(navController: NavController) {
             Box(modifier = Modifier.fillMaxSize()) {
                 config.interfaceData.forEach { element ->
                     when (element.type) {
-                        "button" -> ButtonElement(element, gridSize)
+                        "button" -> ButtonElement(
+                            element,
+                            gridSize,
+                            onPress = { command -> webSocketManager.sendCommand(command) },
+                            onRelease = { command -> webSocketManager.sendCommand("!${command}") } // Or another logic
+                        )
                         "joystick" -> JoystickElement(element, gridSize,
                             onMove = { x, y ->
                                 webSocketManager.sendMovementCommand(

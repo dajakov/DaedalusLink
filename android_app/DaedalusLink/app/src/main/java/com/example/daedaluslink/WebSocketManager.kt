@@ -82,7 +82,7 @@ class WebSocketManager {
         sendCommand(command)
     }
 
-    private fun sendCommand(command: String) {
+    fun sendCommand(command: String) {
         webSocket?.send(command)?.let {
             updateLastCommand(command)
         } ?: println("Failed to send command: WebSocket is not initialized")
