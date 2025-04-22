@@ -36,9 +36,6 @@ android {
     kotlinOptions {
         jvmTarget = "11"
     }
-//    kotlin {
-//        jvmToolchain(23)
-//    }
     buildFeatures {
         compose = true
     }
@@ -75,11 +72,7 @@ dependencies {
     ksp(libs.androidx.room.compiler.v261) // Room compiler with KSP for annotation processing
     implementation(libs.androidx.room.ktx.v261) // Room KTX for Kotlin extension functions
     implementation(libs.gson)
-    testImplementation(libs.junit)
-    androidTestImplementation(libs.androidx.junit)
-    androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
-    androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
 }

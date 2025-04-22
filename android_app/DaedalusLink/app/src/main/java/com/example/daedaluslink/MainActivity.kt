@@ -93,7 +93,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
 
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_splash)
 
 //        resetDatabase(applicationContext) // TODO(remove for production) for development purposes only.
 
