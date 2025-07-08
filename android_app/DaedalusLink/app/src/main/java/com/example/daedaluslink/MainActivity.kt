@@ -2,7 +2,6 @@ package com.example.daedaluslink
 
 import android.annotation.SuppressLint
 import android.os.Bundle
-import android.view.MotionEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
@@ -61,7 +60,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.pointerInteropFilter
 import kotlinx.coroutines.withTimeoutOrNull
 import co.yml.charts.axis.AxisData
 import co.yml.charts.common.model.Point
@@ -78,6 +76,9 @@ import co.yml.charts.ui.linechart.model.ShadowUnderLine
 import co.yml.charts.common.extensions.formatToSinglePrecision
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 
 val sharedState = SharedState()
 
@@ -105,47 +106,57 @@ class MainActivity : ComponentActivity() {
                 !route.startsWith("loading") && route != "landing" && route != "addConnectConfig"
             } ?: true
 
-            Scaffold(
-                bottomBar = {
-                    if (showBottomBar) {
-                        NavigationBar(containerColor = Color.White) {
-                            val items = listOf("control", "debug", "settings")
-                            val icons = listOf(Icons.Default.PlayArrow, Icons.Default.Info, Icons.Default.Settings)
+            Column(modifier = Modifier.fillMaxSize()) {
+                // 🔷 Draw colored background behind status bar
+                Spacer(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(WindowInsets.statusBars.asPaddingValues().calculateTopPadding())
+                        .background(Color.Black) // or any color that matches your theme
+                )
 
-                            items.forEachIndexed { index, screen ->
-                                NavigationBarItem(
-                                    colors = NavigationBarItemColors(
-                                        selectedIconColor = Color.Black,
-                                        selectedIndicatorColor = Color.White,
-                                        selectedTextColor = Color.Black,
-                                        unselectedIconColor = Color.Gray,
-                                        unselectedTextColor = Color.Gray,
-                                        disabledIconColor = Color.Gray,
-                                        disabledTextColor = Color.Gray
-                                    ),
-                                    icon = { Icon(icons[index], contentDescription = screen) },
-                                    label = { Text(screen) },
-                                    selected = navController.currentDestination?.route == screen,
-                                    onClick = { navController.navigate(screen) }
-                                )
+                Scaffold(
+                    modifier = Modifier.fillMaxSize(),
+                    bottomBar = {
+                        if (showBottomBar) {
+                            NavigationBar(containerColor = Color.White) {
+                                val items = listOf("control", "debug", "settings")
+                                val icons = listOf(Icons.Default.PlayArrow, Icons.Default.Info, Icons.Default.Settings)
+
+                                items.forEachIndexed { index, screen ->
+                                    NavigationBarItem(
+                                        colors = NavigationBarItemColors(
+                                            selectedIconColor = Color.Black,
+                                            selectedIndicatorColor = Color.White,
+                                            selectedTextColor = Color.Black,
+                                            unselectedIconColor = Color.Gray,
+                                            unselectedTextColor = Color.Gray,
+                                            disabledIconColor = Color.Gray,
+                                            disabledTextColor = Color.Gray
+                                        ),
+                                        icon = { Icon(icons[index], contentDescription = screen) },
+                                        label = { Text(screen) },
+                                        selected = navController.currentDestination?.route == screen,
+                                        onClick = { navController.navigate(screen) }
+                                    )
+                                }
                             }
                         }
                     }
-                }
-            ) {
-                // Use ViewModel directly from Compose using viewModel()
-                NavHost(navController, startDestination = "landing") {
-                    composable("landing") { LandingScreen(navController, connectConfigViewModel, linkConfigViewModel) }
-                    composable("loading/{configIndex}/{linkIndex}") { backStackEntry ->
-                        val configIndex = backStackEntry.arguments?.getString("configIndex")?.toIntOrNull() ?: 0
-                        val linkIndex = backStackEntry.arguments?.getString("linkIndex")?.toIntOrNull() ?: 0
+                ) {
+                    NavHost(navController, startDestination = "landing") {
+                        composable("landing") { LandingScreen(navController, connectConfigViewModel, linkConfigViewModel) }
+                        composable("loading/{configIndex}/{linkIndex}") { backStackEntry ->
+                            val configIndex = backStackEntry.arguments?.getString("configIndex")?.toIntOrNull() ?: 0
+                            val linkIndex = backStackEntry.arguments?.getString("linkIndex")?.toIntOrNull() ?: 0
 
-                        LoadingScreen(navController, connectConfigViewModel, configIndex, linkConfigViewModel, linkIndex, debugViewModel)
+                            LoadingScreen(navController, connectConfigViewModel, configIndex, linkConfigViewModel, linkIndex, debugViewModel)
+                        }
+                        composable("control") { ControlScreen(navController) }
+                        composable("debug") { DebugScreen(navController, debugViewModel) }
+                        composable("settings") { SettingsScreen(navController) }
+                        composable("addConnectConfig") { AddConnectConfigScreen(navController, connectConfigViewModel) }
                     }
-                    composable("control") { ControlScreen(navController) }
-                    composable("debug") { DebugScreen(navController, debugViewModel) }
-                    composable("settings") { SettingsScreen(navController) }
-                    composable("addConnectConfig") { AddConnectConfigScreen(navController, connectConfigViewModel) }
                 }
             }
         }
@@ -291,7 +302,9 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
         scrollState.animateScrollTo(targetOffset.toInt())
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(modifier = Modifier
+        .fillMaxSize()
+        .background(Color.White),) {
         Box(
             modifier = Modifier
                 .fillMaxWidth() // Take up the full width
@@ -1026,9 +1039,10 @@ fun DebugScreen(navController: NavController, debugViewModel: DebugViewModel) {
         navController.navigate("landing")
     }
 
-    Scaffold {
+    Scaffold (Modifier.background(Color.White)){
         Column(
             Modifier
+                .background(Color.White)
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
@@ -1101,13 +1115,13 @@ fun RpmChartScreen(rpmData: List<Point>) {
     Column(Modifier.fillMaxWidth().padding(8.dp)) {
         LineChart(
             modifier = Modifier
+                .background(Color.White)
                 .fillMaxWidth()
                 .height(250.dp),
             lineChartData = lineChartData
         )
     }
 }
-
 
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @Composable
@@ -1116,15 +1130,16 @@ fun SettingsScreen(navController: NavController) {
         navController.navigate("landing") // Instead of going back, navigate to Home
     }
 
-    Scaffold(
+    Scaffold (
+        Modifier.background(Color.White),
         topBar = { /* No topBar here, it's effectively removed */ },
     ) {
-        Column(modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)) {
-            Button(onClick = { /* Do something */ }) {
-                Text("Notifications Button")
-            }
-        }
+//        Column(modifier = Modifier
+//            .fillMaxSize()
+//            .padding(16.dp)) {
+//            Button(onClick = { /* Do something */ }) {
+//                Text("Notifications Button")
+//            }
+//        }
     }
 }
