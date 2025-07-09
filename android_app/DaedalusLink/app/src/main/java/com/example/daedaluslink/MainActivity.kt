@@ -76,9 +76,8 @@ import co.yml.charts.ui.linechart.model.ShadowUnderLine
 import co.yml.charts.common.extensions.formatToSinglePrecision
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.times
 
 val sharedState = SharedState()
 
@@ -849,20 +848,74 @@ fun AddConnectConfigScreen(navController: NavController, viewModel: ConnectConfi
 }
 
 @Composable
-fun GridLayout(content: @Composable (Pair<Float, Float>) -> Unit) {
-    val screenHeight = LocalConfiguration.current.screenHeightDp - 48 // Exclude bottom nav (adjust as needed)
-    val screenWidth = LocalConfiguration.current.screenWidthDp
+fun GridLayout(content: @Composable (Pair<Dp, Dp>) -> Unit) {
+    val configuration = LocalConfiguration.current
+    val density = LocalDensity.current
 
-    val columns = 8
-    val rows = 14
+    // Get screen size in pixels
+    val screenWidthPx = with(density) { configuration.screenWidthDp.dp.toPx() }
+    val screenHeightPx = with(density) {
+        (configuration.screenHeightDp.dp - WindowInsets.navigationBars.getBottom(this).toDp()).toPx()
+    }
 
-    val cellWidth = screenWidth / columns.toFloat()
-    val cellHeight = screenHeight / rows.toFloat()
+    val cornerPaddingPx = with(density) { 8.dp.toPx() }
 
-    val gridSize = Pair(cellWidth, cellHeight)
+    // Define virtual grid (fixed coordinate system)
+    val virtualColumns = 8
+    val virtualRows = 14
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        content(gridSize) // Pass gridSize to children
+    // Shrink usable space by padding
+    val usableWidth = screenWidthPx - 2 * cornerPaddingPx
+    val usableHeight = screenHeightPx - 2 * cornerPaddingPx
+
+    // Maintain square cells by taking the smaller scaling factor
+    val cellSizePx = minOf(
+        usableWidth / virtualColumns,
+        usableHeight / virtualRows
+    )
+
+    // Convert cellSizePx to Dp
+    val cellSizeDp = with(density) { cellSizePx.toDp() }
+
+    // Calculate actual grid size in pixels (for padding)
+    val gridWidthPx = cellSizePx * virtualColumns
+    val gridHeightPx = cellSizePx * virtualRows
+
+    // Calculate padding in pixels then convert to Dp
+    val horizontalPaddingPx = (screenWidthPx - gridWidthPx) / 2
+    val verticalPaddingPx = (screenHeightPx - gridHeightPx) / 2
+
+    val horizontalPaddingDp = with(density) { horizontalPaddingPx.toDp() }
+    val verticalPaddingDp = with(density) { verticalPaddingPx.toDp() }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(
+                start = horizontalPaddingDp,
+                end = horizontalPaddingDp,
+                top = verticalPaddingDp,
+                bottom = verticalPaddingDp
+            )
+    ) {
+        // Optional: draw grid points
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            for (row in 0..virtualRows) {
+                for (col in 0..virtualColumns) {
+                    drawCircle(
+                        color = Color.Black,
+                        radius = 2.dp.toPx(),
+                        center = Offset(
+                            col * cellSizePx,
+                            row * cellSizePx
+                        )
+                    )
+                }
+            }
+        }
+
+        // Pass cell size in Dp for precise layout
+        content(Pair(cellSizeDp, cellSizeDp))
     }
 }
 
@@ -879,7 +932,7 @@ fun ControlScreen(navController: NavController) {
     @Composable
     fun ButtonElement(
         element: InterfaceData,
-        gridSize: Pair<Float, Float>,
+        gridSize: Pair<Dp, Dp>,
         onPress: (String) -> Unit,
         onRelease: (String) -> Unit
     ) {
@@ -898,21 +951,18 @@ fun ControlScreen(navController: NavController) {
         Box(
             modifier = Modifier
                 .absoluteOffset(
-                    x = (element.position[0] * cellWidth + 2).dp,
-                    y = (element.position[1] * cellHeight + 2).dp
+                    x = element.position[0] * cellWidth,
+                    y = element.position[1] * cellHeight
                 )
                 .size(
-                    width = (element.size[0] * cellWidth - 4).dp,
-                    height = (element.size[1] * cellHeight - 4).dp
+                    width = element.size[0] * cellWidth,
+                    height = element.size[1] * cellHeight
                 )
-                .padding(0.dp)
         ) {
             Button(
                 onClick = {}, // handle press/release manually
                 interactionSource = interactionSource,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(0.dp),
+                modifier = Modifier.fillMaxSize(),
                 colors = ButtonDefaults.buttonColors(Color.Black),
                 shape = RectangleShape
             ) {
@@ -922,24 +972,29 @@ fun ControlScreen(navController: NavController) {
     }
 
     @Composable
-    fun JoystickElement(element: InterfaceData, gridSize: Pair<Float, Float>, onMove: (Byte, Byte) -> Unit) {
-        val configuration = LocalConfiguration.current
-        val screenWidth = configuration.screenWidthDp.dp
-        val joystickRadius = 80f
+    fun JoystickElement(
+        element: InterfaceData,
+        gridSize: Pair<Dp, Dp>,
+        onMove: (Byte, Byte) -> Unit
+    ) {
+        val (cellWidth, cellHeight) = gridSize
+        val density = LocalDensity.current
+
+        val joystickSizeDp = element.size[0] * cellWidth
+        val joystickRadiusPx = with(density) { 40.dp.toPx() } // fixed joystick radius in px
+
         var offsetX by remember { mutableFloatStateOf(0f) }
         var offsetY by remember { mutableFloatStateOf(0f) }
-
-        val (cellWidth, cellHeight) = gridSize
 
         Box(
             modifier = Modifier
                 .absoluteOffset(
-                    x = (element.position[0] * cellWidth + 2).dp,
-                    y = (element.position[1] * cellHeight + 2).dp
+                    x = element.position[0] * cellWidth,
+                    y = element.position[1] * cellHeight
                 )
                 .size(
-                    width = (element.size[0] * cellWidth - 4).dp,
-                    height = (element.size[1] * cellHeight - 4).dp
+                    width = element.size[0] * cellWidth,
+                    height = element.size[1] * cellHeight
                 )
                 .clip(RoundedCornerShape(20.dp))
                 .background(Color(0xFFC7C7C7)),
@@ -947,42 +1002,34 @@ fun ControlScreen(navController: NavController) {
         ) {
             Canvas(
                 modifier = Modifier
-                    .size(screenWidth, screenWidth)
-                    .width((element.size[0] * cellWidth - 2).dp)
-                    .height((element.size[0] * cellWidth - 2).dp)
+                    .size(joystickSizeDp)
                     .pointerInput(Unit) {
                         detectDragGestures(
                             onDragEnd = {
                                 offsetX = 0f
                                 offsetY = 0f
-                                onMove(0, 0) // Send (0, 0) on drag end
+                                onMove(0, 0)
                             },
                             onDrag = { _, dragAmount ->
-                                // Update offsets while ensuring they are within bounds
-                                offsetX = (offsetX + dragAmount.x).coerceIn(
-                                    -screenWidth.toPx() / 2 + joystickRadius,
-                                    screenWidth.toPx() / 2 - joystickRadius
-                                )
-                                offsetY = (offsetY + dragAmount.y).coerceIn(
-                                    -screenWidth.toPx() / 2 + joystickRadius,
-                                    screenWidth.toPx() / 2 - joystickRadius
-                                )
+                                val maxOffsetX = size.width / 2f - joystickRadiusPx
+                                val maxOffsetY = size.height / 2f - joystickRadiusPx
 
-                                // Normalize the offsets to the range [-128, 127]
-                                val normalizedX = ((offsetX / (screenWidth.toPx() / 2 - joystickRadius)) * 127).toInt().coerceIn(-128, 127).toByte()
-                                val normalizedY = ((offsetY / (screenWidth.toPx() / 2 - joystickRadius)) * 127).toInt().coerceIn(-128, 127).toByte()
+                                offsetX = (offsetX + dragAmount.x).coerceIn(-maxOffsetX, maxOffsetX)
+                                offsetY = (offsetY + dragAmount.y).coerceIn(-maxOffsetY, maxOffsetY)
 
-                                // Pass normalized values to the callback
+                                val normalizedX = ((offsetX / maxOffsetX) * 127).toInt().coerceIn(-128, 127).toByte()
+                                val normalizedY = ((offsetY / maxOffsetY) * 127).toInt().coerceIn(-128, 127).toByte()
+
                                 onMove(normalizedX, normalizedY)
                             }
                         )
                     }
             ) {
-                val canvasCenter = Offset(size.width / 2, size.height / 2)
+                val center = Offset(size.width / 2, size.height / 2)
                 drawCircle(
                     color = Color.Black,
-                    radius = joystickRadius,
-                    center = canvasCenter + Offset(offsetX, offsetY)
+                    radius = joystickRadiusPx,
+                    center = center + Offset(offsetX, offsetY)
                 )
             }
         }
@@ -990,7 +1037,6 @@ fun ControlScreen(navController: NavController) {
 
     @Composable
     fun DynamicUI(jsonString: String) {
-        // Deserialize JSON into LinkConfig object
         val config = remember { json.decodeFromString<LinkConfig>(jsonString) }
 
         GridLayout { gridSize ->
@@ -1000,16 +1046,13 @@ fun ControlScreen(navController: NavController) {
                         "button" -> ButtonElement(
                             element,
                             gridSize,
-                            onPress = { command -> webSocketManager.sendCommand(command) },
-                            onRelease = { command -> webSocketManager.sendCommand("!${command}") } // Or another logic
+                            onPress = { cmd -> webSocketManager.sendCommand(cmd) },
+                            onRelease = { cmd -> webSocketManager.sendCommand("!$cmd") }
                         )
-                        "joystick" -> JoystickElement(element, gridSize,
-                            onMove = { x, y ->
-                                webSocketManager.sendMovementCommand(
-                                    x,
-                                    y
-                                )
-                            }
+                        "joystick" -> JoystickElement(
+                            element,
+                            gridSize,
+                            onMove = { x, y -> webSocketManager.sendMovementCommand(x, y) }
                         )
                     }
                 }
