@@ -78,6 +78,8 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.times
+import androidx.compose.ui.unit.IntOffset
+
 
 val sharedState = SharedState()
 
@@ -848,74 +850,55 @@ fun AddConnectConfigScreen(navController: NavController, viewModel: ConnectConfi
 }
 
 @Composable
-fun GridLayout(content: @Composable (Pair<Dp, Dp>) -> Unit) {
+fun GridLayout(content: @Composable (cellSize: Pair<Dp, Dp>, offset: Pair<Dp, Dp>) -> Unit) {
     val configuration = LocalConfiguration.current
     val density = LocalDensity.current
+    val screenWidth = configuration.screenWidthDp.dp
+    val screenHeight = configuration.screenHeightDp.dp
 
-    // Get screen size in pixels
-    val screenWidthPx = with(density) { configuration.screenWidthDp.dp.toPx() }
-    val screenHeightPx = with(density) {
-        (configuration.screenHeightDp.dp - WindowInsets.navigationBars.getBottom(this).toDp()).toPx()
-    }
+    val cornerPadding = 8.dp
+    val usableWidth = screenWidth - 2 * cornerPadding
+    val usableHeight = screenHeight - 2 * cornerPadding
 
-    val cornerPaddingPx = with(density) { 8.dp.toPx() }
-
-    // Define virtual grid (fixed coordinate system)
     val virtualColumns = 8
     val virtualRows = 14
+    val cellSize = minOf(usableWidth / virtualColumns, usableHeight / virtualRows)
 
-    // Shrink usable space by padding
-    val usableWidth = screenWidthPx - 2 * cornerPaddingPx
-    val usableHeight = screenHeightPx - 2 * cornerPaddingPx
+    val gridWidth = cellSize * virtualColumns
+//    val gridHeight = cellSize * virtualRows
 
-    // Maintain square cells by taking the smaller scaling factor
-    val cellSizePx = minOf(
-        usableWidth / virtualColumns,
-        usableHeight / virtualRows
-    )
+    val horizontalPadding = (screenWidth - gridWidth) / 2
+//    val verticalPadding = (screenHeight - gridHeight) / 2  // Calculation to center grid vertically doesn't work, maybe because of navbar?
+    val verticalPadding = cornerPadding
 
-    // Convert cellSizePx to Dp
-    val cellSizeDp = with(density) { cellSizePx.toDp() }
-
-    // Calculate actual grid size in pixels (for padding)
-    val gridWidthPx = cellSizePx * virtualColumns
-    val gridHeightPx = cellSizePx * virtualRows
-
-    // Calculate padding in pixels then convert to Dp
-    val horizontalPaddingPx = (screenWidthPx - gridWidthPx) / 2
-    val verticalPaddingPx = (screenHeightPx - gridHeightPx) / 2
-
-    val horizontalPaddingDp = with(density) { horizontalPaddingPx.toDp() }
-    val verticalPaddingDp = with(density) { verticalPaddingPx.toDp() }
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(
-                start = horizontalPaddingDp,
-                end = horizontalPaddingDp,
-                top = verticalPaddingDp,
-                bottom = verticalPaddingDp
-            )
-    ) {
-        // Optional: draw grid points
-        Canvas(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        Canvas(
+            modifier = Modifier
+                .fillMaxSize()
+                // Use offset in pixels to shift drawing origin without shrinking canvas
+                .offset {
+                    IntOffset(
+                        x = with(density) { horizontalPadding.roundToPx() },
+                        y = with(density) { verticalPadding.roundToPx() }
+                    )
+                }
+        ) {
             for (row in 0..virtualRows) {
                 for (col in 0..virtualColumns) {
                     drawCircle(
                         color = Color.Black,
                         radius = 2.dp.toPx(),
                         center = Offset(
-                            col * cellSizePx,
-                            row * cellSizePx
+                            x = col * cellSize.toPx(),
+                            y = row * cellSize.toPx()
                         )
                     )
                 }
             }
         }
 
-        // Pass cell size in Dp for precise layout
-        content(Pair(cellSizeDp, cellSizeDp))
+        // Pass offset in Dp as before
+        content(Pair(cellSize, cellSize), Pair(horizontalPadding, verticalPadding))
     }
 }
 
@@ -933,26 +916,25 @@ fun ControlScreen(navController: NavController) {
     fun ButtonElement(
         element: InterfaceData,
         gridSize: Pair<Dp, Dp>,
+        offset: Pair<Dp, Dp>,
         onPress: (String) -> Unit,
         onRelease: (String) -> Unit
     ) {
         val (cellWidth, cellHeight) = gridSize
+        val (offsetX, offsetY) = offset
         val interactionSource = remember { MutableInteractionSource() }
         val isPressed by interactionSource.collectIsPressedAsState()
 
         LaunchedEffect(isPressed) {
-            if (isPressed) {
-                onPress(element.pressCommand)
-            } else {
-                onRelease(element.pressCommand)
-            }
+            if (isPressed) onPress(element.pressCommand)
+            else onRelease(element.pressCommand)
         }
 
         Box(
             modifier = Modifier
                 .absoluteOffset(
-                    x = element.position[0] * cellWidth,
-                    y = element.position[1] * cellHeight
+                    x = offsetX + element.position[0] * cellWidth,
+                    y = offsetY + element.position[1] * cellHeight
                 )
                 .size(
                     width = element.size[0] * cellWidth,
@@ -960,7 +942,7 @@ fun ControlScreen(navController: NavController) {
                 )
         ) {
             Button(
-                onClick = {}, // handle press/release manually
+                onClick = {}, // manual press/release
                 interactionSource = interactionSource,
                 modifier = Modifier.fillMaxSize(),
                 colors = ButtonDefaults.buttonColors(Color.Black),
@@ -975,22 +957,24 @@ fun ControlScreen(navController: NavController) {
     fun JoystickElement(
         element: InterfaceData,
         gridSize: Pair<Dp, Dp>,
+        offset: Pair<Dp, Dp>,
         onMove: (Byte, Byte) -> Unit
     ) {
         val (cellWidth, cellHeight) = gridSize
+        val (offsetX, offsetY) = offset
         val density = LocalDensity.current
 
         val joystickSizeDp = element.size[0] * cellWidth
-        val joystickRadiusPx = with(density) { 40.dp.toPx() } // fixed joystick radius in px
+        val joystickRadiusPx = with(density) { 40.dp.toPx() } // fixed radius in px
 
-        var offsetX by remember { mutableFloatStateOf(0f) }
-        var offsetY by remember { mutableFloatStateOf(0f) }
+        var offsetXInternal by remember { mutableFloatStateOf(0f) }
+        var offsetYInternal by remember { mutableFloatStateOf(0f) }
 
         Box(
             modifier = Modifier
                 .absoluteOffset(
-                    x = element.position[0] * cellWidth,
-                    y = element.position[1] * cellHeight
+                    x = offsetX + element.position[0] * cellWidth,
+                    y = offsetY + element.position[1] * cellHeight
                 )
                 .size(
                     width = element.size[0] * cellWidth,
@@ -1006,19 +990,19 @@ fun ControlScreen(navController: NavController) {
                     .pointerInput(Unit) {
                         detectDragGestures(
                             onDragEnd = {
-                                offsetX = 0f
-                                offsetY = 0f
+                                offsetXInternal = 0f
+                                offsetYInternal = 0f
                                 onMove(0, 0)
                             },
                             onDrag = { _, dragAmount ->
                                 val maxOffsetX = size.width / 2f - joystickRadiusPx
                                 val maxOffsetY = size.height / 2f - joystickRadiusPx
 
-                                offsetX = (offsetX + dragAmount.x).coerceIn(-maxOffsetX, maxOffsetX)
-                                offsetY = (offsetY + dragAmount.y).coerceIn(-maxOffsetY, maxOffsetY)
+                                offsetXInternal = (offsetXInternal + dragAmount.x).coerceIn(-maxOffsetX, maxOffsetX)
+                                offsetYInternal = (offsetYInternal + dragAmount.y).coerceIn(-maxOffsetY, maxOffsetY)
 
-                                val normalizedX = ((offsetX / maxOffsetX) * 127).toInt().coerceIn(-128, 127).toByte()
-                                val normalizedY = ((offsetY / maxOffsetY) * 127).toInt().coerceIn(-128, 127).toByte()
+                                val normalizedX = ((offsetXInternal / maxOffsetX) * 127).toInt().coerceIn(-128, 127).toByte()
+                                val normalizedY = ((offsetYInternal / maxOffsetY) * 127).toInt().coerceIn(-128, 127).toByte()
 
                                 onMove(normalizedX, normalizedY)
                             }
@@ -1029,7 +1013,7 @@ fun ControlScreen(navController: NavController) {
                 drawCircle(
                     color = Color.Black,
                     radius = joystickRadiusPx,
-                    center = center + Offset(offsetX, offsetY)
+                    center = center + Offset(offsetXInternal, offsetYInternal)
                 )
             }
         }
@@ -1039,19 +1023,17 @@ fun ControlScreen(navController: NavController) {
     fun DynamicUI(jsonString: String) {
         val config = remember { json.decodeFromString<LinkConfig>(jsonString) }
 
-        GridLayout { gridSize ->
+        GridLayout { gridSize, offset ->
             Box(modifier = Modifier.fillMaxSize()) {
                 config.interfaceData.forEach { element ->
                     when (element.type) {
                         "button" -> ButtonElement(
-                            element,
-                            gridSize,
+                            element, gridSize, offset,
                             onPress = { cmd -> webSocketManager.sendCommand(cmd) },
                             onRelease = { cmd -> webSocketManager.sendCommand("!$cmd") }
                         )
                         "joystick" -> JoystickElement(
-                            element,
-                            gridSize,
+                            element, gridSize, offset,
                             onMove = { x, y -> webSocketManager.sendMovementCommand(x, y) }
                         )
                     }
@@ -1060,10 +1042,11 @@ fun ControlScreen(navController: NavController) {
         }
     }
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.White)
+            .background(Color.White),
+        contentAlignment = Alignment.Center
     ) {
         if (receivedJsonData.isNotEmpty()) {
             DynamicUI(receivedJsonData)

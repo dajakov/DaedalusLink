@@ -30,3 +30,5 @@ google-services.json
 
 # Android Profiling
 *.hprof
+/app/debug/*.apk
+/app/debug/output-metadata.json
