@@ -512,7 +512,7 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
                 .padding(bottom = 16.dp)
         ) {
             Text(
-                text = "1.0.0-alpha", // Dynamic version text can go here
+                text = "1.1.0-alpha", // Dynamic version text can go here
                 color = Color.Gray,  // Grayed-out text
                 fontSize = 12.sp,     // Small font size
                 modifier = Modifier
@@ -694,14 +694,13 @@ fun AddConnectConfigScreen(navController: NavController, viewModel: ConnectConfi
     var selectedIcon by remember { mutableStateOf<IconItem>(IconItem.MaterialIcon(Icons.Default.Info)) } // Default icon
     val configs by viewModel.allConfigs.collectAsState(initial = emptyList())
 
-    Scaffold(
-        topBar = { /* No topBar here, it's effectively removed */ },
-    ) { paddingValues ->
+    Scaffold(Modifier.background(Color.White)){ paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
                 .padding(16.dp)
+                .background(Color.White)
         ) {
             // Config Name Input
             OutlinedTextField(
