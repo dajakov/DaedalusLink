@@ -91,12 +91,13 @@ class MainActivity : ComponentActivity() {
     private val linkConfigViewModel: LinkConfigViewModel by viewModels()
     private val debugViewModel: DebugViewModel by viewModels()
 
-    @SuppressLint("UnusedMaterialScaffoldPaddingParameter", "UnusedMaterial3ScaffoldPaddingParameter")
+    @SuppressLint("UnusedMaterialScaffoldPaddingParameter",
+        "UnusedMaterial3ScaffoldPaddingParameter")
     override fun onCreate(savedInstanceState: Bundle?) {
 
         super.onCreate(savedInstanceState)
 
-//        resetDatabase(applicationContext) // TODO(remove for production) for development purposes only.
+//        resetDatabase(applicationContext) //TODO(remove for production) for development purposes only.
 
         actionBar?.hide()
         setContent {
@@ -104,7 +105,8 @@ class MainActivity : ComponentActivity() {
 
             val currentDestination by navController.currentBackStackEntryAsState()
             val showBottomBar = currentDestination?.destination?.route?.let { route ->
-                !route.startsWith("loading") && route != "landing" && route != "addConnectConfig"
+                !route.startsWith("loading") && route != "landing"
+                        && route != "addConnectConfig"
             } ?: true
 
             Column(modifier = Modifier.fillMaxSize()) {
@@ -112,7 +114,8 @@ class MainActivity : ComponentActivity() {
                 Spacer(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(WindowInsets.statusBars.asPaddingValues().calculateTopPadding())
+                        .height(WindowInsets.statusBars.asPaddingValues()
+                            .calculateTopPadding())
                         .background(Color.Black) // or any color that matches your theme
                 )
 
@@ -122,7 +125,8 @@ class MainActivity : ComponentActivity() {
                         if (showBottomBar) {
                             NavigationBar(containerColor = Color.White) {
                                 val items = listOf("control", "debug", "settings")
-                                val icons = listOf(Icons.Default.PlayArrow, Icons.Default.Info, Icons.Default.Settings)
+                                val icons = listOf(Icons.Default.PlayArrow, Icons.Default.Info,
+                                    Icons.Default.Settings)
 
                                 items.forEachIndexed { index, screen ->
                                     NavigationBarItem(
@@ -135,7 +139,8 @@ class MainActivity : ComponentActivity() {
                                             disabledIconColor = Color.Gray,
                                             disabledTextColor = Color.Gray
                                         ),
-                                        icon = { Icon(icons[index], contentDescription = screen) },
+                                        icon = { Icon(icons[index],
+                                            contentDescription = screen) },
                                         label = { Text(screen) },
                                         selected = navController.currentDestination?.route == screen,
                                         onClick = { navController.navigate(screen) }
@@ -146,17 +151,22 @@ class MainActivity : ComponentActivity() {
                     }
                 ) {
                     NavHost(navController, startDestination = "landing") {
-                        composable("landing") { LandingScreen(navController, connectConfigViewModel, linkConfigViewModel) }
+                        composable("landing") { LandingScreen(navController,
+                            connectConfigViewModel, linkConfigViewModel) }
                         composable("loading/{configIndex}/{linkIndex}") { backStackEntry ->
-                            val configIndex = backStackEntry.arguments?.getString("configIndex")?.toIntOrNull() ?: 0
-                            val linkIndex = backStackEntry.arguments?.getString("linkIndex")?.toIntOrNull() ?: 0
+                            val configIndex = backStackEntry.arguments?.getString("configIndex")
+                                ?.toIntOrNull() ?: 0
+                            val linkIndex = backStackEntry.arguments?.getString("linkIndex")
+                                ?.toIntOrNull() ?: 0
 
-                            LoadingScreen(navController, connectConfigViewModel, configIndex, linkConfigViewModel, linkIndex, debugViewModel)
+                            LoadingScreen(navController, connectConfigViewModel, configIndex,
+                                linkConfigViewModel, linkIndex, debugViewModel)
                         }
                         composable("control") { ControlScreen(navController) }
                         composable("debug") { DebugScreen(navController, debugViewModel) }
                         composable("settings") { SettingsScreen(navController) }
-                        composable("addConnectConfig") { AddConnectConfigScreen(navController, connectConfigViewModel) }
+                        composable("addConnectConfig") { AddConnectConfigScreen(navController,
+                            connectConfigViewModel) }
                     }
                 }
             }
@@ -341,7 +351,8 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
                                 imageVector = iconItem.icon,
                                 contentDescription = null,
                                 modifier = Modifier.fillMaxSize(),
-                                tint = if (index == selectedIndex.intValue) Color.Black else Color.Gray
+                                tint = if (index == selectedIndex.intValue) Color.Black
+                                else Color.Gray
                             )
                         }
 
@@ -394,7 +405,8 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
             // Create a list of config names + Auto-Pull
             val configNames = linkConfigs.map { it.name } + "Auto-Pull from Robot"
 
-            val icon = if (mExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown
+            val icon = if (mExpanded) Icons.Filled.KeyboardArrowUp
+            else Icons.Filled.KeyboardArrowDown
 
             Column(Modifier.padding(15.dp)) {
                 Text("Select Link Config", modifier = Modifier.padding(bottom = 5.dp))
@@ -457,7 +469,8 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
         }
 
         var canvasHeight by remember { mutableFloatStateOf(0f) }
-        val noConfigElementSelected = selectedIndex.intValue == 0 || selectedIndex.intValue == icons.size - 1
+        val noConfigElementSelected = selectedIndex.intValue == 0
+                || selectedIndex.intValue == icons.size - 1
         Canvas(modifier = Modifier
             .weight(1f)
             .fillMaxWidth()
@@ -468,7 +481,8 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
             .let { baseModifier ->
                 if (!noConfigElementSelected) {
                     baseModifier.clickable {
-                        navController.navigate("loading/${(configIDs.getOrNull(selectedIndex.intValue - 1))}/${linkIndex}")
+                        navController.navigate("loading/${(configIDs
+                            .getOrNull(selectedIndex.intValue - 1))}/${linkIndex}")
                     }
                 } else {
                     baseModifier
@@ -691,7 +705,8 @@ fun AddConnectConfigScreen(navController: NavController, viewModel: ConnectConfi
     var selectedOption by remember { mutableStateOf("WiFi") } // Default connection type
     var address by remember { mutableStateOf("") }
     var heartbeat by remember { mutableStateOf("") }
-    var selectedIcon by remember { mutableStateOf<IconItem>(IconItem.MaterialIcon(Icons.Default.Info)) } // Default icon
+    var selectedIcon by remember { mutableStateOf<IconItem>(IconItem
+        .MaterialIcon(Icons.Default.Info)) } // Default icon
     val configs by viewModel.allConfigs.collectAsState(initial = emptyList())
 
     Scaffold(Modifier.background(Color.White)){ paddingValues ->
@@ -747,16 +762,22 @@ fun AddConnectConfigScreen(navController: NavController, viewModel: ConnectConfi
                 RadioButton(
                     selected = selectedOption == "WiFi",
                     onClick = { selectedOption = "WiFi" },
-                    colors = RadioButtonDefaults.colors(selectedColor = Color.Black, unselectedColor = Color.Gray)
+                    colors = RadioButtonDefaults.colors(selectedColor = Color.Black,
+                        unselectedColor = Color.Gray)
                 )
-                Text("WiFi", color = Color.Black, modifier = Modifier.clickable { selectedOption = "WiFi" })
+                Text("WiFi", color = Color.Black, modifier = Modifier.clickable
+                { selectedOption = "WiFi" })
+
                 Spacer(modifier = Modifier.width(16.dp))
+
                 RadioButton(
                     selected = selectedOption == "Bluetooth",
                     onClick = { selectedOption = "Bluetooth" },
-                    colors = RadioButtonDefaults.colors(selectedColor = Color.Black, unselectedColor = Color.Gray)
+                    colors = RadioButtonDefaults.colors(selectedColor = Color.Black,
+                        unselectedColor = Color.Gray)
                 )
-                Text("Bluetooth", color = Color.Black, modifier = Modifier.clickable { selectedOption = "Bluetooth" })
+                Text("Bluetooth", color = Color.Black, modifier = Modifier.clickable
+                { selectedOption = "Bluetooth" })
             }
             Spacer(modifier = Modifier.height(8.dp))
 
@@ -832,7 +853,8 @@ fun AddConnectConfigScreen(navController: NavController, viewModel: ConnectConfi
                             DisplayIcon(icon, modifier = Modifier.size(48.dp)) // Display the icon
                             Text("Type: ${config.connectionType}", color = Color.Black)
                             Text("Address: ${config.address}", color = Color.Black)
-                            Text("Heartbeat: ${config.heartbeatFrequency} Hz", color = Color.Black)
+                            Text("Heartbeat: ${config.heartbeatFrequency} Hz",
+                                color = Color.Black)
                             Spacer(modifier = Modifier.height(8.dp))
                             Button(
                                 onClick = { viewModel.deleteConfig(config) },
@@ -897,7 +919,8 @@ fun GridLayout(content: @Composable (cellSize: Pair<Dp, Dp>, offset: Pair<Dp, Dp
         }
 
         // Pass offset in Dp as before
-        content(Pair(cellSize, cellSize), Pair(horizontalPadding, verticalPadding))
+        content(Pair(cellSize, cellSize), Pair(horizontalPadding,
+            verticalPadding))
     }
 }
 
@@ -997,11 +1020,15 @@ fun ControlScreen(navController: NavController) {
                                 val maxOffsetX = size.width / 2f - joystickRadiusPx
                                 val maxOffsetY = size.height / 2f - joystickRadiusPx
 
-                                offsetXInternal = (offsetXInternal + dragAmount.x).coerceIn(-maxOffsetX, maxOffsetX)
-                                offsetYInternal = (offsetYInternal + dragAmount.y).coerceIn(-maxOffsetY, maxOffsetY)
+                                offsetXInternal = (offsetXInternal + dragAmount.x)
+                                    .coerceIn(-maxOffsetX, maxOffsetX)
+                                offsetYInternal = (offsetYInternal + dragAmount.y)
+                                    .coerceIn(-maxOffsetY, maxOffsetY)
 
-                                val normalizedX = ((offsetXInternal / maxOffsetX) * 127).toInt().coerceIn(-128, 127).toByte()
-                                val normalizedY = ((offsetYInternal / maxOffsetY) * 127).toInt().coerceIn(-128, 127).toByte()
+                                val normalizedX = ((offsetXInternal / maxOffsetX) * 127).toInt()
+                                    .coerceIn(-128, 127).toByte()
+                                val normalizedY = ((offsetYInternal / maxOffsetY) * 127).toInt()
+                                    .coerceIn(-128, 127).toByte()
 
                                 onMove(normalizedX, normalizedY)
                             }
@@ -1080,7 +1107,8 @@ fun DebugScreen(navController: NavController, debugViewModel: DebugViewModel) {
             } else {
                 debugData.forEach { (key, points) ->
                     if (points.isNotEmpty()) {
-                        Text(text = key.replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.titleMedium)
+                        Text(text = key.replaceFirstChar { it.uppercase() },
+                            style = MaterialTheme.typography.titleMedium)
                         RpmChartScreen(rpmData = points)
                         Spacer(modifier = Modifier.height(24.dp))
                     }
