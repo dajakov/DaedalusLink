@@ -1,4 +1,4 @@
-package com.example.daedaluslink
+package com.dajakov.daedaluslink
 
 import android.annotation.SuppressLint
 import android.os.Bundle
@@ -571,7 +571,7 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
                 val cleanIp = ipAddress.substringBefore(":") // ✅ Remove port if present
                 val address = InetAddress.getByName(cleanIp)
                 address.isReachable(2000) // ✅ Timeout: 2 seconds
-            } catch (e: IOException) {
+            } catch (_: IOException) {
                 false
             }
         }
@@ -1159,12 +1159,5 @@ fun SettingsScreen(navController: NavController) {
         Modifier.background(Color.White),
         topBar = { /* No topBar here, it's effectively removed */ },
     ) {
-//        Column(modifier = Modifier
-//            .fillMaxSize()
-//            .padding(16.dp)) {
-//            Button(onClick = { /* Do something */ }) {
-//                Text("Notifications Button")
-//            }
-//        }
     }
 }

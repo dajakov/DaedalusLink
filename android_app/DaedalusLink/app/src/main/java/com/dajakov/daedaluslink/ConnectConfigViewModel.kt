@@ -1,4 +1,4 @@
-package com.example.daedaluslink
+package com.dajakov.daedaluslink
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel

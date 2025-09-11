@@ -1,4 +1,4 @@
-package com.example.daedaluslink
+package com.dajakov.daedaluslink
 
 import android.os.Handler
 import android.os.Looper

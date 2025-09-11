@@ -1,4 +1,4 @@
-package com.example.daedaluslink
+package com.dajakov.daedaluslink
 
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf

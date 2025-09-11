@@ -1,4 +1,4 @@
-package com.example.daedaluslink
+package com.dajakov.daedaluslink
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey

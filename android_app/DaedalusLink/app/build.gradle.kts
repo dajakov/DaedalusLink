@@ -7,11 +7,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.daedaluslink"
+    namespace = "com.dajakov.daedaluslink"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.example.daedaluslink"
+        applicationId = "com.dajakov.daedaluslink"
         minSdk = 26
         targetSdk = 35
         versionCode = 100

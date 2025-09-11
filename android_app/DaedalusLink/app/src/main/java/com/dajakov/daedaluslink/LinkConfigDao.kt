@@ -1,4 +1,4 @@
-package com.example.daedaluslink
+package com.dajakov.daedaluslink
 
 import androidx.room.Dao
 import androidx.room.Delete

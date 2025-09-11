@@ -32,3 +32,5 @@ google-services.json
 *.hprof
 /app/debug/*.apk
 /app/debug/output-metadata.json
+
+release/
