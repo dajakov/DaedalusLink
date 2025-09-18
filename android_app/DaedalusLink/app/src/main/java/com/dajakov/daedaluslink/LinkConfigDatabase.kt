@@ -6,8 +6,6 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 import kotlinx.serialization.json.Json
 
 @Database(entities = [LinkConfig::class], version = 6, exportSchema = false)
@@ -26,7 +24,7 @@ abstract class LinkConfigDatabase : RoomDatabase() {
                     LinkConfigDatabase::class.java,
                     "link_config_db"
                 )
-                    .fallbackToDestructiveMigration()
+                    .fallbackToDestructiveMigration(false)
                     .build()
                 INSTANCE = instance
                 instance
@@ -55,6 +53,6 @@ val json = Json {
 }
 
 // Example usage for deserialization:
-fun parseLinkConfig(jsonString: String): LinkConfig {
-    return json.decodeFromString(jsonString)
-}
+//fun parseLinkConfig(jsonString: String): LinkConfig {
+//    return json.decodeFromString(jsonString)
+//}

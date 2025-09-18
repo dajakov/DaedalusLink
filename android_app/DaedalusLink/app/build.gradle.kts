@@ -1,10 +1,12 @@
+import java.util.Locale
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
-    alias(libs.plugins.kotlin.compose)
     id("com.google.devtools.ksp")
     kotlin("plugin.serialization") version "2.1.20"
     id("com.google.gms.google-services")
+    alias(libs.plugins.compose.compiler)
 }
 
 android {
@@ -45,7 +47,6 @@ android {
             )
         }
         debug {
-            applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
         }
     }
@@ -63,8 +64,6 @@ android {
         compose = true
     }
 }
-
-
 
 dependencies {
     implementation(libs.ui)
@@ -100,6 +99,19 @@ dependencies {
     androidTestImplementation(platform(libs.androidx.compose.bom))
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
-    "playstoreImplementation"(libs.firebase.bom)
+    "playstoreImplementation"(platform(libs.firebase.bom))
     "playstoreImplementation"(libs.google.firebase.analytics)
+}
+
+android.applicationVariants.all {
+    if (this.flavorName == "oss") {
+        // Construct the task name, e.g., processOssDebugGoogleServices, processOssReleaseGoogleServices
+        val variantNameCapitalized = this.name.replaceFirstChar {
+            if (it.isLowerCase()) it.titlecase(Locale.ROOT) else it.toString()
+        }
+        val taskName = "process${variantNameCapitalized}GoogleServices"
+        project.tasks.findByName(taskName)?.let {
+            it.enabled = false
+        }
+    }
 }

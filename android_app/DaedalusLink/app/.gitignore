@@ -1,2 +1,3 @@
 /build
-google-services.json
+src/playstore/google-services.json
+.idea/
