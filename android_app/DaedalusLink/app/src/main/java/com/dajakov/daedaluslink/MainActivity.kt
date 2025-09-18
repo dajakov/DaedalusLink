@@ -76,6 +76,7 @@ import co.yml.charts.ui.linechart.model.ShadowUnderLine
 import co.yml.charts.common.extensions.formatToSinglePrecision
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.times
 import androidx.compose.ui.unit.IntOffset
@@ -101,72 +102,81 @@ class MainActivity : ComponentActivity() {
 
         actionBar?.hide()
         setContent {
-            val navController = rememberNavController()
+            val darkTheme = isSystemInDarkTheme()
+            val colorScheme = if (darkTheme) {
+                darkColorScheme() // Default M3 dark colors
+            } else {
+                lightColorScheme() // Default M3 light colors
+            }
 
-            val currentDestination by navController.currentBackStackEntryAsState()
-            val showBottomBar = currentDestination?.destination?.route?.let { route ->
-                !route.startsWith("loading") && route != "landing"
-                        && route != "addConnectConfig"
-            } ?: true
+            MaterialTheme(
+                colorScheme = colorScheme
+            ) {
+                val navController = rememberNavController()
 
-            Column(modifier = Modifier.fillMaxSize()) {
-                // 🔷 Draw colored background behind status bar
-                Spacer(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(WindowInsets.statusBars.asPaddingValues()
-                            .calculateTopPadding())
-                        .background(Color.Black) // or any color that matches your theme
-                )
+                val currentDestination by navController.currentBackStackEntryAsState()
+                val showBottomBar = currentDestination?.destination?.route?.let { route ->
+                    !route.startsWith("loading") && route != "landing"
+                            && route != "addConnectConfig"
+                } ?: true
 
-                Scaffold(
-                    modifier = Modifier.fillMaxSize(),
-                    bottomBar = {
-                        if (showBottomBar) {
-                            NavigationBar(containerColor = Color.White) {
-                                val items = listOf("control", "debug", "settings")
-                                val icons = listOf(Icons.Default.PlayArrow, Icons.Default.Info,
-                                    Icons.Default.Settings)
+                Column(modifier = Modifier.fillMaxSize()) {
+                    // 🔷 Draw colored background behind status bar
+                    Spacer(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(WindowInsets.statusBars.asPaddingValues()
+                                .calculateTopPadding())
+                            .background(Color.Black) // or any color that matches your theme
+                    )
 
-                                items.forEachIndexed { index, screen ->
-                                    NavigationBarItem(
-                                        colors = NavigationBarItemColors(
-                                            selectedIconColor = Color.Black,
-                                            selectedIndicatorColor = Color.White,
-                                            selectedTextColor = Color.Black,
-                                            unselectedIconColor = Color.Gray,
-                                            unselectedTextColor = Color.Gray,
-                                            disabledIconColor = Color.Gray,
-                                            disabledTextColor = Color.Gray
-                                        ),
-                                        icon = { Icon(icons[index],
-                                            contentDescription = screen) },
-                                        label = { Text(screen) },
-                                        selected = navController.currentDestination?.route == screen,
-                                        onClick = { navController.navigate(screen) }
-                                    )
+                    Scaffold(
+                        modifier = Modifier.fillMaxSize(),
+                        bottomBar = {
+                            if (showBottomBar) {
+                                NavigationBar(containerColor = Color.White) {
+                                    val items = listOf("control", "debug", "settings")
+                                    val icons = listOf(Icons.Default.PlayArrow, Icons.Default.Info,
+                                        Icons.Default.Settings)
+
+                                    items.forEachIndexed { index, screen ->
+                                        NavigationBarItem(
+                                            colors = NavigationBarItemDefaults.colors(
+                                                selectedIconColor = MaterialTheme.colorScheme.primary,
+                                                selectedTextColor = MaterialTheme.colorScheme.primary,
+                                                indicatorColor = MaterialTheme.colorScheme.surfaceVariant,
+                                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                            ),
+                                            icon = { Icon(icons[index],
+                                                contentDescription = screen) },
+                                            label = { Text(screen) },
+                                            selected = navController.currentDestination?.route == screen,
+                                            onClick = { navController.navigate(screen) }
+                                        )
+                                    }
                                 }
                             }
                         }
-                    }
-                ) {
-                    NavHost(navController, startDestination = "landing") {
-                        composable("landing") { LandingScreen(navController,
-                            connectConfigViewModel, linkConfigViewModel) }
-                        composable("loading/{configIndex}/{linkIndex}") { backStackEntry ->
-                            val configIndex = backStackEntry.arguments?.getString("configIndex")
-                                ?.toIntOrNull() ?: 0
-                            val linkIndex = backStackEntry.arguments?.getString("linkIndex")
-                                ?.toIntOrNull() ?: 0
+                    ) {
+                        NavHost(navController, startDestination = "landing") {
+                            composable("landing") { LandingScreen(navController,
+                                connectConfigViewModel, linkConfigViewModel) }
+                            composable("loading/{configIndex}/{linkIndex}") { backStackEntry ->
+                                val configIndex = backStackEntry.arguments?.getString("configIndex")
+                                    ?.toIntOrNull() ?: 0
+                                val linkIndex = backStackEntry.arguments?.getString("linkIndex")
+                                    ?.toIntOrNull() ?: 0
 
-                            LoadingScreen(navController, connectConfigViewModel, configIndex,
-                                linkConfigViewModel, linkIndex, debugViewModel)
+                                LoadingScreen(navController, connectConfigViewModel, configIndex,
+                                    linkConfigViewModel, linkIndex, debugViewModel)
+                            }
+                            composable("control") { ControlScreen(navController) }
+                            composable("debug") { DebugScreen(navController, debugViewModel) }
+                            composable("settings") { SettingsScreen(navController) }
+                            composable("addConnectConfig") { AddConnectConfigScreen(navController,
+                                connectConfigViewModel) }
                         }
-                        composable("control") { ControlScreen(navController) }
-                        composable("debug") { DebugScreen(navController, debugViewModel) }
-                        composable("settings") { SettingsScreen(navController) }
-                        composable("addConnectConfig") { AddConnectConfigScreen(navController,
-                            connectConfigViewModel) }
                     }
                 }
             }

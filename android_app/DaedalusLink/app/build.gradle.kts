@@ -4,11 +4,12 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     id("com.google.devtools.ksp")
     kotlin("plugin.serialization") version "2.1.20"
+    id("com.google.gms.google-services")
 }
 
 android {
     namespace = "com.dajakov.daedaluslink"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.dajakov.daedaluslink"
@@ -20,6 +21,21 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    flavorDimensions += "default"
+
+    productFlavors {
+        create("playstore") {
+            dimension = "default"
+            applicationIdSuffix = ".play"
+            versionNameSuffix = "-play"
+        }
+        create("oss") {
+            dimension = "default"
+            applicationIdSuffix = ".oss"
+            versionNameSuffix = "-oss"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -28,18 +44,27 @@ android {
                 "proguard-rules.pro"
             )
         }
+        debug {
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
+        }
     }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
+
     kotlinOptions {
         jvmTarget = "11"
     }
+
     buildFeatures {
         compose = true
     }
 }
+
+
 
 dependencies {
     implementation(libs.ui)
@@ -75,4 +100,6 @@ dependencies {
     androidTestImplementation(platform(libs.androidx.compose.bom))
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
+    "playstoreImplementation"(libs.firebase.bom)
+    "playstoreImplementation"(libs.google.firebase.analytics)
 }
