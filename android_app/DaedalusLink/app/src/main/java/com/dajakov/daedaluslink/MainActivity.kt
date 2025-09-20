@@ -48,6 +48,7 @@ import androidx.navigation.NavController
 import androidx.navigation.compose.*
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.ui.graphics.graphicsLayer
+import com.dajakov.daedaluslink.ui.theme.DaedalusLinkTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -76,7 +77,9 @@ import co.yml.charts.ui.linechart.model.ShadowUnderLine
 import co.yml.charts.common.extensions.formatToSinglePrecision
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+// import androidx.compose.foundation.isSystemInDarkTheme // No longer directly used here
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.times
 import androidx.compose.ui.unit.IntOffset
@@ -87,7 +90,6 @@ val sharedState = SharedState()
 var webSocketManager = WebSocketManager()
 
 class MainActivity : ComponentActivity() {
-    // Initialize ViewModel
     private val connectConfigViewModel: ConnectConfigViewModel by viewModels()
     private val linkConfigViewModel: LinkConfigViewModel by viewModels()
     private val debugViewModel: DebugViewModel by viewModels()
@@ -102,16 +104,7 @@ class MainActivity : ComponentActivity() {
 
         actionBar?.hide()
         setContent {
-            val darkTheme = isSystemInDarkTheme()
-            val colorScheme = if (darkTheme) {
-                darkColorScheme() // Default M3 dark colors
-            } else {
-                lightColorScheme() // Default M3 light colors
-            }
-
-            MaterialTheme(
-                colorScheme = colorScheme
-            ) {
+            DaedalusLinkTheme {
                 val navController = rememberNavController()
 
                 val currentDestination by navController.currentBackStackEntryAsState()
@@ -121,20 +114,20 @@ class MainActivity : ComponentActivity() {
                 } ?: true
 
                 Column(modifier = Modifier.fillMaxSize()) {
-                    // 🔷 Draw colored background behind status bar
+                    // Draw colored background behind status bar
                     Spacer(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(WindowInsets.statusBars.asPaddingValues()
                                 .calculateTopPadding())
-                            .background(Color.Black) // or any color that matches your theme
+                            .background(Color.Black)
                     )
 
                     Scaffold(
                         modifier = Modifier.fillMaxSize(),
                         bottomBar = {
                             if (showBottomBar) {
-                                NavigationBar(containerColor = Color.White) {
+                                NavigationBar(containerColor = MaterialTheme.colorScheme.primary) {
                                     val items = listOf("control", "debug", "settings")
                                     val icons = listOf(Icons.Default.PlayArrow, Icons.Default.Info,
                                         Icons.Default.Settings)
@@ -208,7 +201,7 @@ object IconMapper {
             "r2d2" -> IconItem.CustomIcon(R.drawable.r2d2)
             "hexapod" -> IconItem.CustomIcon(R.drawable.hexapod)
             "siggi" -> IconItem.CustomIcon(R.drawable.siggi)
-            else -> IconItem.MaterialIcon(Icons.Default.Warning) // Default icon if the ID is unrecognized
+            else -> IconItem.MaterialIcon(Icons.Default.Warning)
         }
     }
 
@@ -218,7 +211,7 @@ object IconMapper {
             is IconItem.MaterialIcon -> when (iconItem.icon) {
                 Icons.Default.Info -> "info"
                 Icons.Default.PlayArrow -> "PlayArrow"
-                else -> "default" // Default if the icon doesn't match
+                else -> "default"
             }
             is IconItem.CustomIcon -> when (iconItem.resourceId) {
                 R.drawable.r2d2 -> "r2d2"
@@ -239,15 +232,14 @@ fun DisplayIcon(icon: IconItem, modifier: Modifier = Modifier) {
             modifier = modifier
         )
         is IconItem.CustomIcon -> {
-            // Use a Box to control the size of the custom icon
             Box(
                 modifier = modifier
-                    .size(48.dp) // Set the size for custom icons
+                    .size(48.dp)
             ) {
                 Image(
                     painter = painterResource(id = icon.resourceId),
                     contentDescription = null,
-                    modifier = Modifier.fillMaxSize() // Ensures the image fills the Box
+                    modifier = Modifier.fillMaxSize()
                 )
             }
         }
@@ -256,13 +248,11 @@ fun DisplayIcon(icon: IconItem, modifier: Modifier = Modifier) {
 
 @Composable
 fun CustomIcon(resourceId: Int, selectedIndex: MutableState<Int>, index: Int) {
-    // Use the painterResource to load the drawable image
     val painter = painterResource(id = resourceId)
 
-    // Apply color filter for tinting the image based on the selected state
-    val tintColor = if (index == selectedIndex.value) Color.Black else Color.Gray
+    val tintColor = if (index == selectedIndex.value) MaterialTheme.colorScheme.surfaceVariant
+                    else MaterialTheme.colorScheme.onSurfaceVariant
 
-    // Use the Image composable to display the loaded image with color filter
     Image(
         painter = painter,
         contentDescription = "Custom Icon",
@@ -274,7 +264,7 @@ fun CustomIcon(resourceId: Int, selectedIndex: MutableState<Int>, index: Int) {
                     selectedIndex.value = index
                 }
             ),
-        colorFilter = ColorFilter.tint(tintColor) // Apply color filter for tint
+        colorFilter = ColorFilter.tint(tintColor)
     )
 }
 
@@ -285,34 +275,24 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
 
     val screenWidth = LocalConfiguration.current.screenWidthDp.dp
 
-    // Convert dp to px using LocalDensity inside the composable context
     val density = LocalDensity.current
     val screenWidthPx = with(density) { screenWidth.toPx() }
     val diameter = screenWidthPx * 0.4f
 
-    // Track the selected config index (-1 for Auto-Pull)
     var linkIndex by remember { mutableIntStateOf(-1) }
-
     val selectedIndex = remember { mutableIntStateOf(0) }
     val scrollState = rememberScrollState()
 
-
     val connectConfigs by connectConfigViewModel.allConfigs.collectAsState(initial = emptyList())
-
     val dynamicIcons = connectConfigs.map { config ->
         IconMapper.getIconById(config.iconId)
     }
-
-    // Create final icons list with "Add" and "Settings"
     val icons = listOf(IconItem.MaterialIcon(Icons.Filled.Add)) +
             dynamicIcons +
             listOf(IconItem.MaterialIcon(Icons.Filled.Settings))
-
-    // Get the names corresponding to the icons
     val texts = listOf("Add...") +
             connectConfigs.map { it.name } +
             listOf("Settings")
-
     val configIDs = connectConfigs.map { it.id}
 
     LaunchedEffect(selectedIndex.intValue) {
@@ -325,18 +305,17 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
 
     Column(modifier = Modifier
         .fillMaxSize()
-        .background(Color.White),) {
+        .background(MaterialTheme.colorScheme.primary),) {
         Box(
             modifier = Modifier
-                .fillMaxWidth() // Take up the full width
-                .padding(top = 16.dp) // Padding from the top
+                .fillMaxWidth()
+                .padding(top = 16.dp)
         ) {
             Text(
-                text = texts.getOrElse(selectedIndex.intValue) { "Unnamed" },  // Dynamically change text based on selected icon
+                text = texts.getOrElse(selectedIndex.intValue) { "Unnamed" },
                 style = MaterialTheme.typography.headlineMedium,
-                modifier = Modifier
-                    .align(Alignment.Center), // Center text horizontally and vertically within Box
-                color = Color.Black
+                modifier = Modifier.align(Alignment.Center),
+                color = MaterialTheme.colorScheme.onPrimary
             )
         }
 
@@ -346,14 +325,11 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
         ) {
             icons.forEachIndexed { index, iconItem ->
                 val size = if (index == selectedIndex.intValue) 120.dp else 100.dp
-
                 Box(
                     modifier = Modifier
                         .padding(horizontal = 8.dp)
                         .size(size)
-                        .clickable {
-                            selectedIndex.intValue = index
-                        }
+                        .clickable { selectedIndex.intValue = index }
                 ) {
                     when (iconItem) {
                         is IconItem.MaterialIcon -> {
@@ -361,11 +337,10 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
                                 imageVector = iconItem.icon,
                                 contentDescription = null,
                                 modifier = Modifier.fillMaxSize(),
-                                tint = if (index == selectedIndex.intValue) Color.Black
-                                else Color.Gray
+                                tint = if (index == selectedIndex.intValue) MaterialTheme.colorScheme.surfaceVariant
+                                else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-
                         is IconItem.CustomIcon -> {
                             CustomIcon(
                                 resourceId = iconItem.resourceId,
@@ -379,28 +354,26 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
         }
 
         if (selectedIndex.intValue == 0 || selectedIndex.intValue == icons.size - 1) {
-            Box(
-                modifier = Modifier.fillMaxWidth() // Ensure it takes full width
-            ) {
+            Box(modifier = Modifier.fillMaxWidth()) {
                 Button(
                     onClick = { navController.navigate("addConnectConfig") },
                     modifier = Modifier
                         .padding(15.dp)
-                        .align(Alignment.Center) // Center the button horizontally
-                        .fillMaxWidth(), // Button width set to 80% of the screen width
-                    colors = ButtonDefaults.buttonColors(Color.Black), // Black button color
-                    shape = RectangleShape // Rectangular shape
+                        .align(Alignment.Center)
+                        .fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.secondary),
+                    shape = RectangleShape
                 ) {
                     if (selectedIndex.intValue == 0){
                         Text(
                             "Add a new Robot",
-                            color = Color.White, // Text color set to white to contrast the black button
+                            color = MaterialTheme.colorScheme.onSecondary,
                             style = MaterialTheme.typography.bodyMedium
                         )
                     } else {
                         Text(
                             "App settings",
-                            color = Color.White, // Text color set to white to contrast the black button
+                            color = MaterialTheme.colorScheme.onSecondary,
                             style = MaterialTheme.typography.bodyMedium
                         )
                     }
@@ -408,39 +381,31 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
             }
         } else {
             var mExpanded by remember { mutableStateOf(false) }
-
-            // Collect available LinkConfigs from ViewModel
             val linkConfigs by linkConfigViewModel.allConfigs.collectAsState(initial = emptyList())
-
-            // Create a list of config names + Auto-Pull
             val configNames = linkConfigs.map { it.name } + "Auto-Pull from Robot"
-
-            val icon = if (mExpanded) Icons.Filled.KeyboardArrowUp
-            else Icons.Filled.KeyboardArrowDown
+            val icon = if (mExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown
 
             Column(Modifier.padding(15.dp)) {
-                Text("Select Link Config", modifier = Modifier.padding(bottom = 5.dp))
-
+                Text("Select Link Config", modifier = Modifier.padding(bottom = 5.dp), color = MaterialTheme.colorScheme.onPrimary)
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .border(1.dp, Color.Gray, RoundedCornerShape(8.dp))
+                        .border(1.dp, MaterialTheme.colorScheme.onPrimary, RoundedCornerShape(8.dp))
                         .clickable { mExpanded = !mExpanded }
                         .padding(16.dp)
                 ) {
                     Text(
                         text = configNames.getOrNull(linkIndex) ?: "[Auto-Pull from Robot]",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = Color.Black
+                        color = MaterialTheme.colorScheme.onPrimary
                     )
-
                     Icon(
                         imageVector = icon,
                         contentDescription = "Dropdown icon",
-                        modifier = Modifier.align(Alignment.CenterEnd).padding(5.dp)
+                        modifier = Modifier.align(Alignment.CenterEnd).padding(5.dp),
+                        tint = MaterialTheme.colorScheme.onPrimary
                     )
                 }
-
                 DropdownMenu(
                     expanded = mExpanded,
                     onDismissRequest = { mExpanded = false },
@@ -452,26 +417,24 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
                                 linkIndex = if (index == configNames.lastIndex) -1 else index
                                 mExpanded = false
                             },
-                            text = { Text(text = name) }
+                            text = { Text(text = name, color = MaterialTheme.colorScheme.onPrimary) }
                         )
                     }
                 }
             }
-            Box(
-                modifier = Modifier.fillMaxWidth() // Ensure it takes full width
-            ) {
+            Box(modifier = Modifier.fillMaxWidth()) {
                 Button(
                     onClick = { navController.navigate("addConnectConfig") },
                     modifier = Modifier
                         .padding(0.dp)
-                        .align(Alignment.Center) // Center the button horizontally
-                        .fillMaxWidth(0.9f), // Button width set to 80% of the screen width
-                    colors = ButtonDefaults.buttonColors(Color.Black), // Black button color
-                    shape = RectangleShape // Rectangular shape
+                        .align(Alignment.Center)
+                        .fillMaxWidth(0.9f),
+                    colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.secondary),
+                    shape = RectangleShape
                 ) {
                     Text(
                         "Add a new config",
-                        color = Color.White, // Text color set to white to contrast the black button
+                        color = MaterialTheme.colorScheme.primary,
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
@@ -479,13 +442,15 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
         }
 
         var canvasHeight by remember { mutableFloatStateOf(0f) }
-        val noConfigElementSelected = selectedIndex.intValue == 0
-                || selectedIndex.intValue == icons.size - 1
+        val noConfigElementSelected = selectedIndex.intValue == 0 || selectedIndex.intValue == icons.size - 1
+
+        val canvasDrawingColor = if (noConfigElementSelected) MaterialTheme.colorScheme.onSurfaceVariant
+        else MaterialTheme.colorScheme.surfaceVariant
+
         Canvas(modifier = Modifier
             .weight(1f)
             .fillMaxWidth()
             .onGloballyPositioned { coordinates ->
-                // Get the size of the canvas (height in this case)
                 canvasHeight = coordinates.size.height.toFloat()
             }
             .let { baseModifier ->
@@ -499,16 +464,13 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
                 }
             }
         ) {
-            // Calculate the bottom position for the arc and rect
-            val bottomOffset = canvasHeight - diameter // Bottom of the canvas
-            val color = if (noConfigElementSelected) Color.Gray else Color.Black
+            val bottomOffset = canvasHeight - diameter
 
-            // Arc: Position the y-coordinate relative to the bottom
             drawArc(
-                color = color,
+                color = canvasDrawingColor,
                 topLeft = Offset(
-                    screenWidthPx * 0.5f - diameter / 2,  // Center horizontally
-                    bottomOffset - diameter * 0.3f        // Position vertically relative to the bottom
+                    screenWidthPx * 0.5f - diameter / 2,
+                    bottomOffset - diameter * 0.3f
                 ),
                 size = Size(diameter, diameter),
                 startAngle = 300f,
@@ -516,31 +478,27 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
                 style = Stroke(30f),
                 useCenter = false
             )
-
-            // Rect: Position the y-coordinate relative to the bottom
             drawRect(
-                color = color,
+                color = canvasDrawingColor,
                 topLeft = Offset(
-                    screenWidthPx * 0.5f - 15f,  // Center horizontally
-                    bottomOffset - diameter * 0.5f // Position vertically relative to the bottom
+                    screenWidthPx * 0.5f - 15f,
+                    bottomOffset - diameter * 0.5f
                 ),
                 size = Size(30f, diameter * 0.7f)
             )
         }
 
-        // Version Text Box at the bottom
         Box(
             modifier = Modifier
-                .height(40.dp)  // Fixed height for the version text container
+                .height(40.dp)
                 .fillMaxWidth()
                 .padding(bottom = 16.dp)
         ) {
             Text(
-                text = "1.1.0-alpha", // Dynamic version text can go here
-                color = Color.Gray,  // Grayed-out text
-                fontSize = 12.sp,     // Small font size
-                modifier = Modifier
-                    .align(Alignment.Center)  // Align to the center of the Box
+                text = "1.2.0-alpha",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 12.sp,
+                modifier = Modifier.align(Alignment.Center)
             )
         }
     }
@@ -554,7 +512,6 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
 
     val connectConfigs by connectConfigViewModel.allConfigs.collectAsState(initial = emptyList())
     if (connectConfigs.isEmpty()) {
-        // 🔹 Show loading UI while waiting for data
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator()
         }
@@ -572,10 +529,8 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
     var showExitButton by remember { mutableStateOf(false) }
     var steps by remember { mutableStateOf(listOf<String>()) }
 
-    // Function to update steps in the UI (with the option for same line or newline)
     fun updateSteps(step: String, isSameLine: Boolean = false) {
         steps = if (isSameLine) {
-            // Append the step to the last entry, keeping it on the same line
             if (steps.isNotEmpty()) {
                 val lastStep = steps.last() + " | " + step
                 steps.dropLast(1) + lastStep
@@ -583,7 +538,6 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
                 listOf(step)
             }
         } else {
-            // Add the step as a new entry (new line)
             steps + step
         }
     }
@@ -592,9 +546,9 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
     suspend fun performPing(ipAddress: String): Boolean {
         return withContext(Dispatchers.IO) {
             try {
-                val cleanIp = ipAddress.substringBefore(":") // ✅ Remove port if present
+                val cleanIp = ipAddress.substringBefore(":")
                 val address = InetAddress.getByName(cleanIp)
-                address.isReachable(2000) // ✅ Timeout: 2 seconds
+                address.isReachable(2000)
             } catch (_: IOException) {
                 false
             }
@@ -613,7 +567,7 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
         } else {
             updateSteps("❌", true)
             connectionSuccess = false
-            showExitButton = true // Show exit button if ping fails
+            showExitButton = true
         }
 
         // Step 2: Try to connect to WebSocket
@@ -627,7 +581,7 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
             if (!webSocketResult) {
                 updateSteps("❌", true)
                 connectionSuccess = false
-                showExitButton = true // Show exit button if WebSocket fails
+                showExitButton = true
             } else {
                 updateSteps("✅", true)
                 connectionSuccess = true
@@ -641,7 +595,7 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
                 while (!sharedState.isJsonReceived) {
                     delay(500)
                 }
-                true // JSON received within time
+                true
             }
 
             if (jsonReceived == true) {
@@ -649,7 +603,7 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
             } else {
                 updateSteps("❌", true)
                 connectionSuccess = false
-                showExitButton = true // Show exit button if JSON reception fails
+                showExitButton = true
             }
         }
 
@@ -660,34 +614,31 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
         }
     }
 
-    // UI for loading screen
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.White),
+            .background(MaterialTheme.colorScheme.primary),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            CircularProgressIndicator(color = Color.Black)
+            CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimary)
             Spacer(modifier = Modifier.height(16.dp))
             Text(
                 text = debugText,
-                color = Color.Black,
+                color = MaterialTheme.colorScheme.onPrimary,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold
             )
 
             Spacer(modifier = Modifier.height(16.dp))
-            // Display the steps list under the progress indicator
             steps.forEach { step ->
                 Text(
                     text = step,
-                    color = Color.Black,
+                    color = MaterialTheme.colorScheme.onPrimary,
                     fontSize = 14.sp
                 )
             }
 
-            // Show exit button if there's a failure
             if (showExitButton) {
                 Spacer(modifier = Modifier.height(16.dp))
                 Button(
@@ -695,12 +646,12 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
                     modifier = Modifier
                         .padding(0.dp)
                         .fillMaxWidth(0.9f), // Button width set to 80% of the screen width
-                    colors = ButtonDefaults.buttonColors(Color.Black), // Black button color
+                    colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.secondary), // Black button color
                     shape = RectangleShape // Rectangular shape
                 ) {
                     Text(
                         "Exit",
-                        color = Color.White, // Text color set to white to contrast the black button
+                        color = MaterialTheme.colorScheme.onSecondary, // Text color set to white to contrast the black button
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
@@ -712,36 +663,37 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
 @Composable
 fun AddConnectConfigScreen(navController: NavController, viewModel: ConnectConfigViewModel) {
     var configName by remember { mutableStateOf("") }
-    var selectedOption by remember { mutableStateOf("WiFi") } // Default connection type
+    var selectedOption by remember { mutableStateOf("WiFi") }
     var address by remember { mutableStateOf("") }
     var heartbeat by remember { mutableStateOf("") }
     var selectedIcon by remember { mutableStateOf<IconItem>(IconItem
         .MaterialIcon(Icons.Default.Info)) } // Default icon
     val configs by viewModel.allConfigs.collectAsState(initial = emptyList())
 
-    Scaffold(Modifier.background(Color.White)){ paddingValues ->
+    Scaffold(Modifier.background(MaterialTheme.colorScheme.primary)){ paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
                 .padding(16.dp)
-                .background(Color.White)
+                .background(MaterialTheme.colorScheme.primary)
         ) {
-            // Config Name Input
             OutlinedTextField(
                 value = configName,
                 onValueChange = { configName = it },
-                label = { Text("Configuration Name", color = Color.Gray) },
+                label = { Text("Configuration Name", color = MaterialTheme.colorScheme.onPrimary) },
                 modifier = Modifier.fillMaxWidth(),
                 colors = TextFieldDefaults.colors(
-                    focusedIndicatorColor = Color.Black,
-                    unfocusedIndicatorColor = Color.Gray
+                    focusedIndicatorColor = MaterialTheme.colorScheme.surfaceVariant,
+                    unfocusedIndicatorColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    focusedContainerColor = MaterialTheme.colorScheme.primary,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.primary,
+                    cursorColor = MaterialTheme.colorScheme.onPrimary
                 )
             )
             Spacer(modifier = Modifier.height(16.dp))
 
-            // LazyRow for selecting icons from the list
-            Text("Select an Icon:", fontWeight = FontWeight.Bold, color = Color.Black)
+            Text("Select an Icon:", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
             LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier.fillMaxWidth()
@@ -753,29 +705,29 @@ fun AddConnectConfigScreen(navController: NavController, viewModel: ConnectConfi
                             .size(48.dp)
                             .then(
                                 if (selectedIcon == icon) Modifier
-                                    .graphicsLayer { alpha = 1f } // Selected icon is normal
+                                    .graphicsLayer { alpha = 1f }
                                 else Modifier
                                     .graphicsLayer {
                                         alpha = 0.4f
-                                    } // Non-selected icons are grayed out
+                                    }
                             )
                     ) {
-                        DisplayIcon(icon, modifier = Modifier.size(48.dp)) // Display the icon
+                        DisplayIcon(icon, modifier = Modifier.size(48.dp))
                     }
                 }
             }
             Spacer(modifier = Modifier.height(16.dp))
 
             // Connection type selection (Radio buttons for WiFi and Bluetooth)
-            Text("Select Connection Type:", fontWeight = FontWeight.Bold, color = Color.Black)
+            Text("Select Connection Type:", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 RadioButton(
                     selected = selectedOption == "WiFi",
                     onClick = { selectedOption = "WiFi" },
-                    colors = RadioButtonDefaults.colors(selectedColor = Color.Black,
-                        unselectedColor = Color.Gray)
+                    colors = RadioButtonDefaults.colors(selectedColor = MaterialTheme.colorScheme.onPrimary,
+                        unselectedColor = MaterialTheme.colorScheme.onSurfaceVariant)
                 )
-                Text("WiFi", color = Color.Black, modifier = Modifier.clickable
+                Text("WiFi", color = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.clickable
                 { selectedOption = "WiFi" })
 
                 Spacer(modifier = Modifier.width(16.dp))
@@ -783,10 +735,10 @@ fun AddConnectConfigScreen(navController: NavController, viewModel: ConnectConfi
                 RadioButton(
                     selected = selectedOption == "Bluetooth",
                     onClick = { selectedOption = "Bluetooth" },
-                    colors = RadioButtonDefaults.colors(selectedColor = Color.Black,
-                        unselectedColor = Color.Gray)
+                    colors = RadioButtonDefaults.colors(selectedColor = MaterialTheme.colorScheme.onPrimary,
+                        unselectedColor = MaterialTheme.colorScheme.onSurfaceVariant)
                 )
-                Text("Bluetooth", color = Color.Black, modifier = Modifier.clickable
+                Text("Bluetooth", color = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.clickable
                 { selectedOption = "Bluetooth" })
             }
             Spacer(modifier = Modifier.height(8.dp))
@@ -795,11 +747,14 @@ fun AddConnectConfigScreen(navController: NavController, viewModel: ConnectConfi
             OutlinedTextField(
                 value = address,
                 onValueChange = { address = it },
-                label = { Text("IP/MAC Address", color = Color.Gray) },
+                label = { Text("IP/MAC Address", color = MaterialTheme.colorScheme.onPrimary) },
                 modifier = Modifier.fillMaxWidth(),
                 colors = TextFieldDefaults.colors(
-                    focusedIndicatorColor = Color.Black,
-                    unfocusedIndicatorColor = Color.Gray
+                    focusedIndicatorColor = MaterialTheme.colorScheme.surfaceVariant,
+                    unfocusedIndicatorColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    focusedContainerColor = MaterialTheme.colorScheme.primary,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.primary,
+                    cursorColor = MaterialTheme.colorScheme.onPrimary
                 )
             )
             Spacer(modifier = Modifier.height(16.dp))
@@ -808,12 +763,15 @@ fun AddConnectConfigScreen(navController: NavController, viewModel: ConnectConfi
             OutlinedTextField(
                 value = heartbeat,
                 onValueChange = { heartbeat = it },
-                label = { Text("Heartbeat Frequency (Hz)", color = Color.Gray) },
+                label = { Text("Heartbeat Frequency (Hz)", color = MaterialTheme.colorScheme.onPrimary) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 modifier = Modifier.fillMaxWidth(),
                 colors = TextFieldDefaults.colors(
-                    focusedIndicatorColor = Color.Black,
-                    unfocusedIndicatorColor = Color.Gray
+                    focusedIndicatorColor = MaterialTheme.colorScheme.surfaceVariant,
+                    unfocusedIndicatorColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    focusedContainerColor = MaterialTheme.colorScheme.primary,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.primary,
+                    cursorColor = MaterialTheme.colorScheme.onPrimary
                 )
             )
             Spacer(modifier = Modifier.height(16.dp))
@@ -822,7 +780,7 @@ fun AddConnectConfigScreen(navController: NavController, viewModel: ConnectConfi
             Box(modifier = Modifier.fillMaxWidth()) {
                 Button(
                     onClick = {
-                        val iconId = IconMapper.getIconId(selectedIcon) // Get the ID of the selected icon
+                        val iconId = IconMapper.getIconId(selectedIcon)
                         val config = ConnectConfig(
                             name = configName,
                             connectionType = selectedOption,
@@ -835,42 +793,42 @@ fun AddConnectConfigScreen(navController: NavController, viewModel: ConnectConfi
                     },
                     modifier = Modifier
                         .padding(0.dp)
-                        .align(Alignment.Center) // Center the button horizontally
-                        .fillMaxWidth(), // Button width set to 80% of the screen width
-                    colors = ButtonDefaults.buttonColors(Color.Black), // Black button color
-                    shape = RectangleShape // Rectangular shape // Center the button horizontally
+                        .align(Alignment.Center)
+                        .fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.onPrimary),
+                    shape = RectangleShape
                 ) {
-                    Text("Save new config", color = Color.White,
+                    Text("Save new config", color = MaterialTheme.colorScheme.onSecondary,
                     style = MaterialTheme.typography.bodyMedium)
                 }
             }
 
             Spacer(modifier = Modifier.height(24.dp))
-            Text("Saved Configurations:", fontWeight = FontWeight.Bold, color = Color.Black)
+            Text("Saved Configurations:", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
 
             // Display saved configurations with icons
             LazyColumn {
                 items(configs) { config ->
-                    val icon = IconMapper.getIconById(config.iconId) // Get the icon using the saved ID
+                    val icon = IconMapper.getIconById(config.iconId)
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 8.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.LightGray)
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.onSurfaceVariant)
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            Text("Name: ${config.name}", color = Color.Black) // Display config name
-                            DisplayIcon(icon, modifier = Modifier.size(48.dp)) // Display the icon
-                            Text("Type: ${config.connectionType}", color = Color.Black)
-                            Text("Address: ${config.address}", color = Color.Black)
+                            Text("Name: ${config.name}", color = MaterialTheme.colorScheme.onPrimary)
+                            DisplayIcon(icon, modifier = Modifier.size(48.dp))
+                            Text("Type: ${config.connectionType}", color = MaterialTheme.colorScheme.onPrimary)
+                            Text("Address: ${config.address}", color = MaterialTheme.colorScheme.onPrimary)
                             Text("Heartbeat: ${config.heartbeatFrequency} Hz",
-                                color = Color.Black)
+                                color = MaterialTheme.colorScheme.onPrimary)
                             Spacer(modifier = Modifier.height(8.dp))
                             Button(
                                 onClick = { viewModel.deleteConfig(config) },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                             ) {
-                                Text("Delete", color = Color.White)
+                                Text("Delete", color = MaterialTheme.colorScheme.onPrimary)
                             }
                         }
                     }
@@ -896,17 +854,16 @@ fun GridLayout(content: @Composable (cellSize: Pair<Dp, Dp>, offset: Pair<Dp, Dp
     val cellSize = minOf(usableWidth / virtualColumns, usableHeight / virtualRows)
 
     val gridWidth = cellSize * virtualColumns
-//    val gridHeight = cellSize * virtualRows
 
     val horizontalPadding = (screenWidth - gridWidth) / 2
-//    val verticalPadding = (screenHeight - gridHeight) / 2  // Calculation to center grid vertically doesn't work, maybe because of navbar?
     val verticalPadding = cornerPadding
+
+    val circleColor = MaterialTheme.colorScheme.onPrimary
 
     Box(modifier = Modifier.fillMaxSize()) {
         Canvas(
             modifier = Modifier
                 .fillMaxSize()
-                // Use offset in pixels to shift drawing origin without shrinking canvas
                 .offset {
                     IntOffset(
                         x = with(density) { horizontalPadding.roundToPx() },
@@ -917,7 +874,7 @@ fun GridLayout(content: @Composable (cellSize: Pair<Dp, Dp>, offset: Pair<Dp, Dp
             for (row in 0..virtualRows) {
                 for (col in 0..virtualColumns) {
                     drawCircle(
-                        color = Color.Black,
+                        color = circleColor,
                         radius = 2.dp.toPx(),
                         center = Offset(
                             x = col * cellSize.toPx(),
@@ -928,7 +885,6 @@ fun GridLayout(content: @Composable (cellSize: Pair<Dp, Dp>, offset: Pair<Dp, Dp
             }
         }
 
-        // Pass offset in Dp as before
         content(Pair(cellSize, cellSize), Pair(horizontalPadding,
             verticalPadding))
     }
@@ -974,13 +930,13 @@ fun ControlScreen(navController: NavController) {
                 )
         ) {
             Button(
-                onClick = {}, // manual press/release
+                onClick = {},
                 interactionSource = interactionSource,
                 modifier = Modifier.fillMaxSize(),
-                colors = ButtonDefaults.buttonColors(Color.Black),
+                colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.primary),
                 shape = RectangleShape
             ) {
-                Text(element.label, color = Color.White)
+                Text(element.label, color = MaterialTheme.colorScheme.onPrimary)
             }
         }
     }
@@ -997,10 +953,12 @@ fun ControlScreen(navController: NavController) {
         val density = LocalDensity.current
 
         val joystickSizeDp = element.size[0] * cellWidth
-        val joystickRadiusPx = with(density) { 40.dp.toPx() } // fixed radius in px
+        val joystickRadiusPx = with(density) { 40.dp.toPx() }
 
         var offsetXInternal by remember { mutableFloatStateOf(0f) }
         var offsetYInternal by remember { mutableFloatStateOf(0f) }
+
+        val circleColor = MaterialTheme.colorScheme.primary
 
         Box(
             modifier = Modifier
@@ -1047,7 +1005,7 @@ fun ControlScreen(navController: NavController) {
             ) {
                 val center = Offset(size.width / 2, size.height / 2)
                 drawCircle(
-                    color = Color.Black,
+                    color = circleColor,
                     radius = joystickRadiusPx,
                     center = center + Offset(offsetXInternal, offsetYInternal)
                 )
@@ -1081,7 +1039,7 @@ fun ControlScreen(navController: NavController) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.White),
+            .background(MaterialTheme.colorScheme.primary),
         contentAlignment = Alignment.Center
     ) {
         if (receivedJsonData.isNotEmpty()) {
@@ -1101,10 +1059,10 @@ fun DebugScreen(navController: NavController, debugViewModel: DebugViewModel) {
         navController.navigate("landing")
     }
 
-    Scaffold (Modifier.background(Color.White)){
+    Scaffold (Modifier.background(MaterialTheme.colorScheme.primary)){
         Column(
             Modifier
-                .background(Color.White)
+                .background(MaterialTheme.colorScheme.primary)
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
@@ -1136,11 +1094,11 @@ fun RpmChartScreen(rpmData: List<Point>) {
     val yMin = rpmData.minOf { it.y }
     val yMax = rpmData.maxOf { it.y }
     val yRange = yMax - yMin
-    val safeRange = if (yRange == 0f) 1f else yRange // avoid division by zero
+    val safeRange = if (yRange == 0f) 1f else yRange
 
     val yAxisData = AxisData.Builder()
         .steps(steps)
-        .backgroundColor(Color.White)
+        .backgroundColor(MaterialTheme.colorScheme.primary)
         .labelAndAxisLinePadding(20.dp)
         .labelData { i ->
             val yScale = safeRange / steps
@@ -1150,9 +1108,9 @@ fun RpmChartScreen(rpmData: List<Point>) {
 
     val xAxisData = AxisData.Builder()
         .axisStepSize(100.dp)
-        .backgroundColor(Color.White)
+        .backgroundColor(MaterialTheme.colorScheme.primary)
         .steps(rpmData.size - 1)
-        .labelData { "" } // Empty string hides the labels
+        .labelData { "" }
         .labelAndAxisLinePadding(0.dp)
         .build()
 
@@ -1172,13 +1130,13 @@ fun RpmChartScreen(rpmData: List<Point>) {
         xAxisData = xAxisData,
         yAxisData = yAxisData,
         gridLines = GridLines(),
-        backgroundColor = Color.White
+        backgroundColor = MaterialTheme.colorScheme.primary
     )
 
     Column(Modifier.fillMaxWidth().padding(8.dp)) {
         LineChart(
             modifier = Modifier
-                .background(Color.White)
+                .background(MaterialTheme.colorScheme.primary)
                 .fillMaxWidth()
                 .height(250.dp),
             lineChartData = lineChartData
@@ -1190,12 +1148,12 @@ fun RpmChartScreen(rpmData: List<Point>) {
 @Composable
 fun SettingsScreen(navController: NavController) {
     BackHandler {
-        navController.navigate("landing") // Instead of going back, navigate to Home
+        navController.navigate("landing")
     }
 
     Scaffold (
-        Modifier.background(Color.White),
-        topBar = { /* No topBar here, it's effectively removed */ },
+        Modifier.background(MaterialTheme.colorScheme.primary),
+        topBar = { },
     ) {
     }
 }
