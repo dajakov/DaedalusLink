@@ -224,24 +224,21 @@ object IconMapper {
 }
 
 @Composable
-fun DisplayIcon(icon: IconItem, modifier: Modifier = Modifier) {
+fun DisplayIcon(icon: IconItem, modifier: Modifier = Modifier, tint: Color = LocalContentColor.current) {
     when (icon) {
         is IconItem.MaterialIcon -> Icon(
-            icon.icon,
+            imageVector = icon.icon,
             contentDescription = null,
-            modifier = modifier
+            modifier = modifier,
+            tint = tint
         )
         is IconItem.CustomIcon -> {
-            Box(
-                modifier = modifier
-                    .size(48.dp)
-            ) {
-                Image(
-                    painter = painterResource(id = icon.resourceId),
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
+            Image(
+                painter = painterResource(id = icon.resourceId),
+                contentDescription = null,
+                modifier = modifier, // Apply the modifier directly to the Image
+                colorFilter = ColorFilter.tint(tint)
+            )
         }
     }
 }
@@ -670,7 +667,7 @@ fun AddConnectConfigScreen(navController: NavController, viewModel: ConnectConfi
         .MaterialIcon(Icons.Default.Info)) } // Default icon
     val configs by viewModel.allConfigs.collectAsState(initial = emptyList())
 
-    Scaffold(Modifier.background(MaterialTheme.colorScheme.primary)){ paddingValues ->
+    Scaffold(containerColor = MaterialTheme.colorScheme.primary){ paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
