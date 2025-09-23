@@ -17,7 +17,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -39,6 +38,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -56,6 +56,9 @@ import java.io.IOException
 import java.net.InetAddress
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.HorizontalDivider
 import kotlinx.coroutines.withTimeoutOrNull
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -85,7 +88,7 @@ class MainActivity : ComponentActivity() {
                 val currentDestination by navController.currentBackStackEntryAsState()
                 val showBottomBar = currentDestination?.destination?.route?.let { route ->
                     !route.startsWith("loading") && route != "landing"
-                            && route != "addConnectConfig"
+                            && route != "addConnectConfig" && route != "appSettings"
                 } ?: true
 
                 Column(modifier = Modifier.fillMaxSize()) {
@@ -139,6 +142,7 @@ class MainActivity : ComponentActivity() {
                                 LoadingScreen(navController, connectConfigViewModel, configIndex,
                                     linkConfigViewModel, linkIndex, debugViewModel)
                             }
+                            composable("appSettings") { AppSettingsScreen(navController) }
                             composable("control") { ControlScreen(navController) }
                             composable("debug") { DebugScreen(navController, debugViewModel) }
                             composable("settings") { SettingsScreen(navController) }
@@ -328,7 +332,13 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
         if (selectedIndex.intValue == 0 || selectedIndex.intValue == icons.size - 1) {
             Box(modifier = Modifier.fillMaxWidth()) {
                 Button(
-                    onClick = { navController.navigate("addConnectConfig") },
+                    onClick = {
+                        if (selectedIndex.intValue == 0) {
+                            navController.navigate("addConnectConfig")
+                        } else { // This implies selectedIndex.intValue == icons.size - 1
+                            navController.navigate("appSettings")
+                        }
+                    },
                     modifier = Modifier
                         .padding(15.dp)
                         .align(Alignment.Center)
@@ -473,6 +483,160 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
                 modifier = Modifier.align(Alignment.Center)
             )
         }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AppSettingsScreen(navController: NavController) {
+    var isDarkMode by remember { mutableStateOf(false) } // TODO: Replace with actual theme state
+    val uriHandler = LocalUriHandler.current
+
+    Scaffold(containerColor = MaterialTheme.colorScheme.primary,
+        topBar = {
+            TopAppBar(
+                title = { Text("App Settings") },
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
+                )
+            )
+        }
+    ) { paddingValues ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(16.dp)
+        ) {
+            // --- General Settings ---
+            item {
+                Text(
+                    text = "General",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(bottom = 8.dp),
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+            }
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("Dark Mode", color = MaterialTheme.colorScheme.onBackground)
+                    Switch(
+                        checked = isDarkMode,
+                        onCheckedChange = { isDarkMode = it },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = MaterialTheme.colorScheme.primary,
+                            checkedTrackColor = MaterialTheme.colorScheme.primaryContainer,
+                            uncheckedThumbColor = MaterialTheme.colorScheme.outline,
+                            uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
+                    )
+                }
+            }
+
+            // --- App Information ---
+            item {
+                Text(
+                    text = "App Information",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(bottom = 8.dp, top = 16.dp),
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+            }
+            item {
+                InfoRow("App Version", "1.2.0-alpha") // Example version
+            }
+            item {
+                InfoRow("Build Number", "120") // Example build number
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 16.dp),
+                    thickness = DividerDefaults.Thickness,
+                    color = DividerDefaults.color
+                )
+            }
+
+
+            // --- Contact & Support ---
+            item {
+                Text(
+                    text = "Contact & Support",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(bottom = 8.dp, top = 16.dp),
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+            }
+            item {
+                InfoRow("Developer", "dajakov")
+            }
+            item {
+                InfoRow("Contact Email", "contact@dajakov.com") // Placeholder
+            }
+            item {
+                Text(
+                    text = "Privacy Policy",
+                    modifier = Modifier
+                        .padding(vertical = 8.dp)
+                        .clickable {
+                            try {
+                                uriHandler.openUri("https://dajakov.com/privacy") // Placeholder URL
+                            } catch (e: Exception) {
+                                // Handle error, e.g., show a toast
+                            }
+                        },
+                    color = MaterialTheme.colorScheme.tertiary,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            item {
+                 Text(
+                    text = "Report an Issue",
+                    modifier = Modifier
+                        .padding(vertical = 8.dp)
+                        .clickable {
+                             try {
+                                uriHandler.openUri("https://dajakov.com/report-issue") // Placeholder URL
+                            } catch (e: Exception) {
+                                // Handle error, e.g., show a toast
+                            }
+                        },
+                    color = MaterialTheme.colorScheme.tertiary,
+                    fontWeight = FontWeight.Bold
+                )
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 16.dp),
+                    thickness = DividerDefaults.Thickness,
+                    color = DividerDefaults.color
+                )
+            }
+             item {
+                Spacer(modifier = Modifier.height(50.dp)) // Add some space at the bottom
+            }
+        }
+    }
+}
+
+@Composable
+fun InfoRow(label: String, value: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(label, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
+        Text(value, color = MaterialTheme.colorScheme.onBackground)
     }
 }
 
@@ -632,6 +796,7 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddConnectConfigScreen(navController: NavController, viewModel: ConnectConfigViewModel) {
     var configName by remember { mutableStateOf("") }
@@ -642,7 +807,22 @@ fun AddConnectConfigScreen(navController: NavController, viewModel: ConnectConfi
         .MaterialIcon(Icons.Default.Info)) } // Default icon
     val configs by viewModel.allConfigs.collectAsState(initial = emptyList())
 
-    Scaffold(containerColor = MaterialTheme.colorScheme.primary){ paddingValues ->
+    Scaffold(containerColor = MaterialTheme.colorScheme.primary,
+        topBar = {
+            TopAppBar(
+                title = { Text("Add Connect Config") },
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
+                )
+            )
+        }){ paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
