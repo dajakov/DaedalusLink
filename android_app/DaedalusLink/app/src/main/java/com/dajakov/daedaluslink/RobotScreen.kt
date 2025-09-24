@@ -100,10 +100,10 @@ fun ControlScreen(navController: NavController) {
                 onClick = {},
                 interactionSource = interactionSource,
                 modifier = Modifier.fillMaxSize(),
-                colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.primary),
+                colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.surface),
                 shape = RectangleShape
             ) {
-                Text(element.label, color = MaterialTheme.colorScheme.onPrimary)
+                Text(element.label, color = MaterialTheme.colorScheme.onSurface)
             }
         }
     }
@@ -138,7 +138,7 @@ fun ControlScreen(navController: NavController) {
                     height = element.size[1] * cellHeight
                 )
                 .clip(RoundedCornerShape(20.dp))
-                .background(Color(0xFFC7C7C7)),
+                .background(MaterialTheme.colorScheme.surface),
             contentAlignment = Alignment.Center
         ) {
             Canvas(

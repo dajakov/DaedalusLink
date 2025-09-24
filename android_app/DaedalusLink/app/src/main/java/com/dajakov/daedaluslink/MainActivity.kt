@@ -114,7 +114,7 @@ class MainActivity : ComponentActivity() {
                                         NavigationBarItem(
                                             colors = NavigationBarItemDefaults.colors(
                                                 selectedIconColor = MaterialTheme.colorScheme.primary,
-                                                selectedTextColor = MaterialTheme.colorScheme.primary,
+                                                selectedTextColor = MaterialTheme.colorScheme.onPrimary,
                                                 indicatorColor = MaterialTheme.colorScheme.surfaceVariant,
                                                 unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
                                                 unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
@@ -567,7 +567,6 @@ fun AppSettingsScreen(navController: NavController) {
                 )
             }
 
-
             // --- Contact & Support ---
             item {
                 Text(
@@ -938,7 +937,7 @@ fun AddConnectConfigScreen(navController: NavController, viewModel: ConnectConfi
                             connectionType = selectedOption,
                             address = address,
                             heartbeatFrequency = heartbeat.toIntOrNull() ?: 0,
-                            iconId = iconId // Save the icon ID in the DB
+                            iconId = iconId
                         )
                         viewModel.insertConfig(config)
                         navController.navigate("landing")
@@ -965,22 +964,56 @@ fun AddConnectConfigScreen(navController: NavController, viewModel: ConnectConfi
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 8.dp),
+                            .padding(vertical = 4.dp),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.onSurfaceVariant)
                     ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Text("Name: ${config.name}", color = MaterialTheme.colorScheme.onPrimary)
-                            DisplayIcon(icon, modifier = Modifier.size(48.dp))
-                            Text("Type: ${config.connectionType}", color = MaterialTheme.colorScheme.onPrimary)
-                            Text("Address: ${config.address}", color = MaterialTheme.colorScheme.onPrimary)
-                            Text("Heartbeat: ${config.heartbeatFrequency} Hz",
-                                color = MaterialTheme.colorScheme.onPrimary)
-                            Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            DisplayIcon(
+                                icon,
+                                modifier = Modifier.size(40.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "Name: ${config.name}",
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    "Type: ${config.connectionType}",
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    fontSize = 12.sp
+                                )
+                                Text(
+                                    "Address: ${config.address}",
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    fontSize = 12.sp
+                                )
+                                Text(
+                                    "Heartbeat: ${config.heartbeatFrequency} Hz",
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    fontSize = 12.sp
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
                             Button(
                                 onClick = { viewModel.deleteConfig(config) },
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                                contentPadding = PaddingValues(
+                                    horizontal = 8.dp,
+                                    vertical = 4.dp
+                                )
                             ) {
-                                Text("Delete", color = MaterialTheme.colorScheme.onPrimary)
+                                Text(
+                                    "Delete",
+                                    color = MaterialTheme.colorScheme.onError,
+                                    fontSize = 12.sp
+                                )
                             }
                         }
                     }
