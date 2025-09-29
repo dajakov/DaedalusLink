@@ -78,6 +78,10 @@ class WebSocketManager {
         sendCommand("move $x,$y")
     }
 
+    fun sendSliderCommand(commandId: String, value: Byte) {
+        sendCommand("slider$commandId $value")
+    }
+
     fun sendCommandToRobot(command: String) {
         sendCommand(command)
     }

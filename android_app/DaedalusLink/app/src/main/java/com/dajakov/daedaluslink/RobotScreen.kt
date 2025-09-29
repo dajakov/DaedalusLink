@@ -34,8 +34,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -125,7 +125,7 @@ fun ControlScreen(navController: NavController) {
         var offsetXInternal by remember { mutableFloatStateOf(0f) }
         var offsetYInternal by remember { mutableFloatStateOf(0f) }
 
-        val circleColor = MaterialTheme.colorScheme.primary
+        val circleColor = MaterialTheme.colorScheme.onSurface
 
         Box(
             modifier = Modifier
@@ -181,6 +181,122 @@ fun ControlScreen(navController: NavController) {
     }
 
     @Composable
+    fun SliderElement(
+        element: InterfaceData,
+        gridSize: Pair<Dp, Dp>,
+        offset: Pair<Dp, Dp>,
+        onValueChange: (String, Byte) -> Unit
+    ) {
+        val (cellWidth, cellHeight) = gridSize
+        val (offsetX, offsetY) = offset
+
+        val sliderViewWidthDp = element.size[0] * cellWidth
+        val sliderViewHeightDp = element.size[1] * cellHeight
+
+        var sliderPositionNormalized by remember { mutableFloatStateOf(0f) } // 0f (left/bottom) to 1f (right/top)
+
+        val trackColor = MaterialTheme.colorScheme.surface
+        val thumbColor = MaterialTheme.colorScheme.onSurface
+        val labelColor = MaterialTheme.colorScheme.onSurface
+
+        Box(
+            modifier = Modifier
+                .absoluteOffset(
+                    x = offsetX + element.position[0] * cellWidth,
+                    y = offsetY + element.position[1] * cellHeight
+                )
+                .size(
+                    width = sliderViewWidthDp,
+                    height = sliderViewHeightDp
+                )
+                .background(MaterialTheme.colorScheme.surface)
+                .pointerInput(Unit) {
+                    detectDragGestures { change, _ ->
+                        val isHorizontal = size.width >= size.height
+                        val thumbRadiusVisual = if (isHorizontal) size.height * 0.4f else size.width * 0.4f // Used for visual padding
+
+                        val newPositionNormalized = if (isHorizontal) {
+                            val trackActualWidth = size.width - 2 * thumbRadiusVisual
+                            if (trackActualWidth <= 0) { // Avoid division by zero or negative
+                                0.5f // Default to center if track is too small
+                            } else {
+                                val rawX = change.position.x - thumbRadiusVisual
+                                (rawX / trackActualWidth).coerceIn(0f, 1f)
+                            }
+                        } else { // Vertical
+                            val trackActualHeight = size.height - 2 * thumbRadiusVisual
+                            if (trackActualHeight <= 0) { // Avoid division by zero or negative
+                                0.5f // Default to center if track is too small
+                            } else {
+                                val rawY = change.position.y - thumbRadiusVisual
+                                (1 - (rawY / trackActualHeight)).coerceIn(0f, 1f) // Inverted for Y-axis
+                            }
+                        }
+                        sliderPositionNormalized = newPositionNormalized
+
+                        val byteValue = (sliderPositionNormalized * 255f - 128f).toInt().coerceIn(-128, 127).toByte()
+                        onValueChange(element.pressCommand, byteValue)
+                        change.consume()
+                    }
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val isHorizontal = size.width >= size.height
+                val trackThickness = if (isHorizontal) size.height * 0.25f else size.width * 0.25f
+                val thumbRadius = if (isHorizontal) size.height * 0.4f else size.width * 0.4f
+                val trackCornerRadiusValue = trackThickness / 2f
+
+                if (isHorizontal) {
+                    val trackActualWidth = size.width - 2 * thumbRadius
+                    if (trackActualWidth > 0) {
+                        // Draw Track
+                        drawRoundRect(
+                            color = trackColor,
+                            topLeft = Offset(thumbRadius, (size.height - trackThickness) / 2f),
+                            size = androidx.compose.ui.geometry.Size(trackActualWidth, trackThickness),
+                            cornerRadius = CornerRadius(trackCornerRadiusValue, trackCornerRadiusValue)
+                        )
+                        // Draw Thumb
+                        val thumbCenterX = thumbRadius + (sliderPositionNormalized * trackActualWidth)
+                        drawCircle(
+                            color = thumbColor,
+                            radius = thumbRadius,
+                            center = Offset(thumbCenterX, size.height / 2f)
+                        )
+                    }
+                } else { // Vertical slider
+                    val trackActualHeight = size.height - 2 * thumbRadius
+                    if (trackActualHeight > 0) {
+                        // Draw Track
+                        drawRoundRect(
+                            color = trackColor,
+                            topLeft = Offset((size.width - trackThickness) / 2f, thumbRadius),
+                            size = androidx.compose.ui.geometry.Size(trackThickness, trackActualHeight),
+                            cornerRadius = CornerRadius(trackCornerRadiusValue, trackCornerRadiusValue)
+                        )
+                        // Draw Thumb
+                        val thumbCenterY = thumbRadius + ((1 - sliderPositionNormalized) * trackActualHeight)
+                        drawCircle(
+                            color = thumbColor,
+                            radius = thumbRadius,
+                            center = Offset(size.width / 2f, thumbCenterY)
+                        )
+                    }
+                }
+            }
+            Text(
+                text = element.label,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(2.dp),
+                color = labelColor,
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+    }
+
+    @Composable
     fun DynamicUI(jsonString: String) {
         val config = remember { json.decodeFromString<LinkConfig>(jsonString) }
 
@@ -196,6 +312,12 @@ fun ControlScreen(navController: NavController) {
                         "joystick" -> JoystickElement(
                             element, gridSize, offset,
                             onMove = { x, y -> webSocketManager.sendMovementCommand(x, y) }
+                        )
+                        "slider" -> SliderElement(
+                            element, gridSize, offset,
+                            onValueChange = { command, value ->
+                                webSocketManager.sendSliderCommand(command, value)
+                            }
                         )
                     }
                 }
