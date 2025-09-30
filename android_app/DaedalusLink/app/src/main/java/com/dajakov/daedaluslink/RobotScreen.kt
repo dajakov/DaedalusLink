@@ -7,8 +7,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,7 +18,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -36,9 +40,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.times
@@ -68,6 +74,56 @@ fun ControlScreen(navController: NavController) {
     val receivedJsonData = sharedState.receivedJsonData
 
     @Composable
+    fun ConnectionStatusIndicator(isConnected: Boolean, modifier: Modifier = Modifier) {
+        val (indicatorColor, statusText) = if (isConnected) {
+            Pair(Color.Green, "Connected")
+        } else {
+            Pair(Color.Red, "Disconnected")
+        }
+        val backgroundColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f)
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = modifier
+                .clip(RoundedCornerShape(8.dp))
+                .background(backgroundColor)
+                .padding(horizontal = 8.dp, vertical = 4.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(10.dp)
+                    .background(indicatorColor, shape = CircleShape)
+            )
+            Spacer(modifier = Modifier.width(4.dp)) // Reduced spacer
+            Text(
+                text = statusText,
+                color = MaterialTheme.colorScheme.onSurface,
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1 // Ensure text stays on a single line
+            )
+        }
+    }
+
+    @Composable
+    fun PacketLossIndicator(percentage: Float, modifier: Modifier = Modifier) {
+        val lossText = "Loss: ${percentage.toInt()}%"
+        // Optionally, change color based on loss value
+        val textColor = if (percentage > 30f) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+
+        Text(
+            text = lossText,
+            color = textColor,
+            style = MaterialTheme.typography.bodySmall,
+            maxLines = 1, // Ensure text stays on a single line
+            modifier = modifier
+                .clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.8f))
+                .padding(horizontal = 8.dp, vertical = 4.dp)
+        )
+    }
+
+
+    @Composable
     fun ButtonElement(
         element: InterfaceData,
         gridSize: Pair<Dp, Dp>,
@@ -88,12 +144,12 @@ fun ControlScreen(navController: NavController) {
         Box(
             modifier = Modifier
                 .absoluteOffset(
-                    x = offsetX + element.position[0] * cellWidth,
-                    y = offsetY + element.position[1] * cellHeight
+                    x = offsetX + element.position[0] * cellWidth + 1.dp,
+                    y = offsetY + element.position[1] * cellHeight + 1.dp
                 )
                 .size(
-                    width = element.size[0] * cellWidth,
-                    height = element.size[1] * cellHeight
+                    width = element.size[0] * cellWidth - 2.dp,
+                    height = element.size[1] * cellHeight - 2.dp
                 )
         ) {
             Button(
@@ -209,7 +265,7 @@ fun ControlScreen(navController: NavController) {
                     width = sliderViewWidthDp,
                     height = sliderViewHeightDp
                 )
-                .background(MaterialTheme.colorScheme.surface)
+                .background(MaterialTheme.colorScheme.primary)
                 .pointerInput(Unit) {
                     detectDragGestures { change, _ ->
                         val isHorizontal = size.width >= size.height
@@ -325,16 +381,46 @@ fun ControlScreen(navController: NavController) {
         }
     }
 
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.primary),
-        contentAlignment = Alignment.Center
+            .background(MaterialTheme.colorScheme.primary)
     ) {
-        if (receivedJsonData.isNotEmpty()) {
-            DynamicUI(receivedJsonData)
-        } else {
-            Text("No JSON file received!")
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            ConnectionStatusIndicator(
+                isConnected = sharedState.isConnected,
+                modifier = Modifier.weight(1.5f)
+            )
+            Text(
+                text = sharedState.robotName,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onPrimary,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.weight(1f) // Reduced weight for robotName to give more to sides
+            )
+            PacketLossIndicator(
+                percentage = sharedState.packetLossPercentage,
+                modifier = Modifier.weight(1.5f)
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+            contentAlignment = Alignment.Center
+        ) {
+            if (receivedJsonData.isNotEmpty()) {
+                DynamicUI(receivedJsonData)
+            } else {
+                Text("No JSON file received!")
+            }
         }
     }
 }

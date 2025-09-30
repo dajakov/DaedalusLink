@@ -710,7 +710,7 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
             updateSteps("Connecting to WebSocket... ")
 
             webSocketResult = webSocketManager.connectToWebSocket(
-                "ws://$ipAddress", sharedState, heartbeatFrequency, debugViewModel
+                "ws://$ipAddress", sharedState, heartbeatFrequency, debugViewModel, robotName
             )
 
             if (!webSocketResult) {
