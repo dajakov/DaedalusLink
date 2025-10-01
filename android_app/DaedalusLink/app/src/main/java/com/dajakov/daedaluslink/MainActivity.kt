@@ -1,9 +1,11 @@
 package com.dajakov.daedaluslink
 
 import android.annotation.SuppressLint
+import android.graphics.Color as AndroidColor
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -33,17 +35,20 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.view.WindowCompat
 import androidx.navigation.NavController
 import androidx.navigation.compose.*
 import androidx.compose.material3.TextFieldDefaults
@@ -62,27 +67,54 @@ import androidx.compose.material3.HorizontalDivider
 import kotlinx.coroutines.withTimeoutOrNull
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalLayoutDirection
 
-val sharedState = SharedState()
-
-var webSocketManager = WebSocketManager()
+val sharedState = SharedState() // Global shared state
 
 class MainActivity : ComponentActivity() {
     private val connectConfigViewModel: ConnectConfigViewModel by viewModels()
     private val linkConfigViewModel: LinkConfigViewModel by viewModels()
     private val debugViewModel: DebugViewModel by viewModels()
 
+    private lateinit var analyticsLogger: AnalyticsLogger
+    private lateinit var webSocketManager: WebSocketManager
+
     @SuppressLint("UnusedMaterialScaffoldPaddingParameter",
         "UnusedMaterial3ScaffoldPaddingParameter")
     override fun onCreate(savedInstanceState: Bundle?) {
-
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge() // Enable edge-to-edge display
+
+        analyticsLogger = getAnalyticsProvider(applicationContext).getLogger()
+        webSocketManager = WebSocketManager(analyticsLogger) // Initialize WebSocketManager with logger
 
 //        resetDatabase(applicationContext) //TODO(remove for production) for development purposes only.
 
         actionBar?.hide()
+
         setContent {
             DaedalusLinkTheme {
+                // Control status bar appearance
+                val view = LocalView.current
+                val primaryColor = MaterialTheme.colorScheme.primary
+                // Determine if the primary color is "dark".
+                // A simple heuristic: if luminance is < 0.5, it's dark.
+                // Adjust this threshold if needed for your specific color scheme.
+                val isPrimaryColorDark = primaryColor.toArgb().let { color ->
+                    // Extract RGB components
+                    val red = android.graphics.Color.red(color)
+                    val green = android.graphics.Color.green(color)
+                    val blue = android.graphics.Color.blue(color)
+                    // Calculate luminance (simplified formula)
+                    (0.299 * red + 0.587 * green + 0.114 * blue) / 255 < 0.5
+                }
+
+                SideEffect {
+                    val window = this.window
+                    window.statusBarColor = AndroidColor.TRANSPARENT // Make status bar transparent
+                    WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !isPrimaryColorDark
+                }
+
                 val navController = rememberNavController()
 
                 val currentDestination by navController.currentBackStackEntryAsState()
@@ -96,18 +128,20 @@ class MainActivity : ComponentActivity() {
                     Spacer(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(WindowInsets.statusBars.asPaddingValues()
-                                .calculateTopPadding())
-                            .background(Color.Black)
+                            .windowInsetsTopHeight(WindowInsets.statusBars) // Use specific inset height
+                            .background(MaterialTheme.colorScheme.primary) // Use theme color
                     )
 
                     Scaffold(
                         modifier = Modifier.fillMaxSize(),
+                        // Apply padding to avoid content overlapping with system bars if Scaffold is not fullscreen
+                        // For edge-to-edge, top padding is handled by the Spacer, bottom by navigation gestures or Scaffold's bottomBar padding
+                        contentWindowInsets = WindowInsets(0,0,0,0), // Let content go edge to edge within scaffold
                         bottomBar = {
                             if (showBottomBar) {
                                 NavigationBar(containerColor = MaterialTheme.colorScheme.primary) {
                                     val items = listOf("control", "debug", "settings")
-                                    val icons = listOf(Icons.Default.PlayArrow, Icons.Default.Info,
+                                    val iconsList = listOf(Icons.Default.PlayArrow, Icons.Default.Info,
                                         Icons.Default.Settings)
 
                                     items.forEachIndexed { index, screen ->
@@ -119,7 +153,7 @@ class MainActivity : ComponentActivity() {
                                                 unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
                                                 unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
                                             ),
-                                            icon = { Icon(icons[index],
+                                            icon = { Icon(iconsList[index],
                                                 contentDescription = screen) },
                                             label = { Text(screen) },
                                             selected = navController.currentDestination?.route == screen,
@@ -129,8 +163,15 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
                         }
-                    ) {
-                        NavHost(navController, startDestination = "landing") {
+                    ) {paddingValues ->
+                        NavHost(navController, startDestination = "landing",
+                            // Apply padding from Scaffold, but remove top padding as Spacer handles it
+                            modifier = Modifier.padding(PaddingValues(
+                                top = 0.dp, // Top padding is now handled by the Spacer
+                                bottom = paddingValues.calculateBottomPadding(),
+                                start = paddingValues.calculateLeftPadding(LocalLayoutDirection.current),
+                                end = paddingValues.calculateRightPadding(LocalLayoutDirection.current)
+                            ))) {
                             composable("landing") { LandingScreen(navController,
                                 connectConfigViewModel, linkConfigViewModel) }
                             composable("loading/{configIndex}/{linkIndex}") { backStackEntry ->
@@ -139,11 +180,12 @@ class MainActivity : ComponentActivity() {
                                 val linkIndex = backStackEntry.arguments?.getString("linkIndex")
                                     ?.toIntOrNull() ?: 0
 
+                                // Pass the MainActivity's webSocketManager instance to LoadingScreen
                                 LoadingScreen(navController, connectConfigViewModel, configIndex,
-                                    linkConfigViewModel, linkIndex, debugViewModel)
+                                    linkConfigViewModel, linkIndex, debugViewModel, webSocketManager)
                             }
                             composable("appSettings") { AppSettingsScreen(navController) }
-                            composable("control") { ControlScreen(navController) }
+                            composable("control") { ControlScreen(navController, webSocketManager) } // Pass webSocketManager
                             composable("debug") { DebugScreen(navController, debugViewModel) }
                             composable("settings") { SettingsScreen(navController) }
                             composable("addConnectConfig") { AddConnectConfigScreen(navController,
@@ -263,7 +305,7 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
     val dynamicIcons = connectConfigs.map { config ->
         IconMapper.getIconById(config.iconId)
     }
-    val icons = listOf(IconItem.MaterialIcon(Icons.Filled.Add)) +
+    val iconsList = listOf(IconItem.MaterialIcon(Icons.Filled.Add)) +
             dynamicIcons +
             listOf(IconItem.MaterialIcon(Icons.Filled.Settings))
     val texts = listOf("Add...") +
@@ -281,7 +323,11 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
 
     Column(modifier = Modifier
         .fillMaxSize()
-        .background(MaterialTheme.colorScheme.primary),) {
+        .background(MaterialTheme.colorScheme.primary)
+        // Apply system bar padding to the content of LandingScreen,
+        // so it doesn't draw under the status bar (already colored) or nav bar
+        .padding(WindowInsets.systemBars.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom).asPaddingValues())
+        ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -299,7 +345,7 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
             .horizontalScroll(scrollState)
             .padding(vertical = 16.dp)
         ) {
-            icons.forEachIndexed { index, iconItem ->
+            iconsList.forEachIndexed { index, iconItem ->
                 val size = if (index == selectedIndex.intValue) 120.dp else 100.dp
                 Box(
                     modifier = Modifier
@@ -329,13 +375,13 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
             }
         }
 
-        if (selectedIndex.intValue == 0 || selectedIndex.intValue == icons.size - 1) {
+        if (selectedIndex.intValue == 0 || selectedIndex.intValue == iconsList.size - 1) {
             Box(modifier = Modifier.fillMaxWidth()) {
                 Button(
                     onClick = {
                         if (selectedIndex.intValue == 0) {
                             navController.navigate("addConnectConfig")
-                        } else { // This implies selectedIndex.intValue == icons.size - 1
+                        } else { // This implies selectedIndex.intValue == iconsList.size - 1
                             navController.navigate("appSettings")
                         }
                     },
@@ -365,7 +411,7 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
             var mExpanded by remember { mutableStateOf(false) }
             val linkConfigs by linkConfigViewModel.allConfigs.collectAsState(initial = emptyList())
             val configNames = linkConfigs.map { it.name } + "Auto-Pull from Robot"
-            val icon = if (mExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown
+            val iconDropdown = if (mExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown
 
             Column(Modifier.padding(15.dp)) {
                 Text("Select Link Config", modifier = Modifier.padding(bottom = 5.dp), color = MaterialTheme.colorScheme.onPrimary)
@@ -382,7 +428,7 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
                         color = MaterialTheme.colorScheme.onPrimary
                     )
                     Icon(
-                        imageVector = icon,
+                        imageVector = iconDropdown,
                         contentDescription = "Dropdown icon",
                         modifier = Modifier.align(Alignment.CenterEnd).padding(5.dp),
                         tint = MaterialTheme.colorScheme.onPrimary
@@ -406,7 +452,14 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
             }
             Box(modifier = Modifier.fillMaxWidth()) {
                 Button(
-                    onClick = { navController.navigate("addConnectConfig") },
+                    onClick = {                         val actualConfigId = configIDs.getOrNull(selectedIndex.intValue - 1)
+                        if (actualConfigId != null) {
+                           navController.navigate("loading/$actualConfigId/$linkIndex")
+                        } else {
+                            // Handle error: No valid config selected, or placeholder was clicked
+                            println("Error: No valid robot configuration selected for connection.")
+                        }
+                    },
                     modifier = Modifier
                         .padding(0.dp)
                         .align(Alignment.Center)
@@ -415,8 +468,8 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
                     shape = RectangleShape
                 ) {
                     Text(
-                        "Add a new config",
-                        color = MaterialTheme.colorScheme.primary,
+                        "Connect to Robot",
+                        color = MaterialTheme.colorScheme.onSecondary,
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
@@ -424,7 +477,7 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
         }
 
         var canvasHeight by remember { mutableFloatStateOf(0f) }
-        val noConfigElementSelected = selectedIndex.intValue == 0 || selectedIndex.intValue == icons.size - 1
+        val noConfigElementSelected = selectedIndex.intValue == 0 || selectedIndex.intValue == iconsList.size - 1
 
         val canvasDrawingColor = if (noConfigElementSelected) MaterialTheme.colorScheme.onSurfaceVariant
         else MaterialTheme.colorScheme.surfaceVariant
@@ -438,8 +491,12 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
             .let { baseModifier ->
                 if (!noConfigElementSelected) {
                     baseModifier.clickable {
-                        navController.navigate("loading/${(configIDs
-                            .getOrNull(selectedIndex.intValue - 1))}/${linkIndex}")
+                        val actualConfigId = configIDs.getOrNull(selectedIndex.intValue - 1)
+                        if (actualConfigId != null) {
+                           navController.navigate("loading/$actualConfigId/$linkIndex")
+                        } else {
+                             println("Error: No valid robot configuration selected for connection from canvas click.")
+                        }
                     }
                 } else {
                     baseModifier
@@ -477,7 +534,7 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
                 .padding(bottom = 16.dp)
         ) {
             Text(
-                text = "1.2.0-alpha",
+                text = "1.2.0-alpha", // TODO: Use BuildConfig.VERSION_NAME
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 12.sp,
                 modifier = Modifier.align(Alignment.Center)
@@ -512,7 +569,7 @@ fun AppSettingsScreen(navController: NavController) {
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
+                .padding(paddingValues) // This already includes status bar padding due to enableEdgeToEdge and Scaffold defaults
                 .padding(16.dp)
         ) {
             // --- General Settings ---
@@ -559,7 +616,7 @@ fun AppSettingsScreen(navController: NavController) {
                 InfoRow("App Version", "1.2.0-alpha") // Example version
             }
             item {
-                InfoRow("Build Number", "120") // Example build number
+                InfoRow("Build Number", "100") // Example build number, TODO: Use BuildConfig.VERSION_CODE
                 HorizontalDivider(
                     modifier = Modifier.padding(vertical = 16.dp),
                     thickness = DividerDefaults.Thickness,
@@ -641,23 +698,33 @@ fun InfoRow(label: String, value: String) {
 
 @Composable
 fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectConfigViewModel,
-                  configIndex: Int, linkConfigViewModel: LinkConfigViewModel, linkIndex: Int,
-                  debugViewModel: DebugViewModel) {
+                  configIndex: Int, linkConfigViewModel: LinkConfigViewModel, linkIndexArgument: Int,
+                  debugViewModel: DebugViewModel, webSocketMngr: WebSocketManager) { // Renamed linkIndex to linkIndexArgument, added webSocketMngr
     BackHandler { }
 
     val connectConfigs by connectConfigViewModel.allConfigs.collectAsState(initial = emptyList())
-    if (connectConfigs.isEmpty()) {
+    // It's safer to not proceed if connectConfigs is empty early on, though find should handle it.
+    if (connectConfigs.isEmpty() && configIndex != 0) { // Check if configIndex is valid if list is empty
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator()
+            Text("Error: No configurations loaded.", color = MaterialTheme.colorScheme.onError)
+            Button(onClick = { navController.navigate("landing") }) { Text("Go Back") }
         }
         return
     }
 
     val activeConfig = connectConfigs.find { it.id == configIndex }
 
-    val ipAddress = activeConfig?.address
-    val robotName = activeConfig?.name
-    val heartbeatFrequency = activeConfig?.heartbeatFrequency!!.toLong()
+    if (activeConfig == null) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("Error: Configuration not found for ID $configIndex.", color = MaterialTheme.colorScheme.onError)
+            Button(onClick = { navController.navigate("landing") }) { Text("Go Back") }
+        }
+        return
+    }
+
+    val ipAddress = activeConfig.address
+    val robotName = activeConfig.name
+    val heartbeatFrequency = activeConfig.heartbeatFrequency.toLong()
 
     var debugText by remember { mutableStateOf("Initializing...") }
     var connectionSuccess by remember { mutableStateOf(true) }
@@ -665,23 +732,18 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
     var steps by remember { mutableStateOf(listOf<String>()) }
 
     fun updateSteps(step: String, isSameLine: Boolean = false) {
-        steps = if (isSameLine) {
-            if (steps.isNotEmpty()) {
-                val lastStep = steps.last() + " | " + step
-                steps.dropLast(1) + lastStep
-            } else {
-                listOf(step)
-            }
+        steps = if (isSameLine && steps.isNotEmpty()) {
+            val lastStep = steps.last() + " | " + step
+            steps.dropLast(1) + lastStep
         } else {
             steps + step
         }
     }
 
-    // Function to perform a ping to an IP
-    suspend fun performPing(ipAddress: String): Boolean {
+    suspend fun performPing(ip: String): Boolean {
         return withContext(Dispatchers.IO) {
             try {
-                val cleanIp = ipAddress.substringBefore(":")
+                val cleanIp = ip.substringBefore(":")
                 val address = InetAddress.getByName(cleanIp)
                 address.isReachable(2000)
             } catch (_: IOException) {
@@ -691,30 +753,28 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
     }
 
     LaunchedEffect(Unit) {
-        // Step 1: Ping the IP address
         updateSteps("Pinging $ipAddress...")
         debugText = "Connecting to $robotName... "
-        val pingResult = ipAddress?.let { performPing(it) }
+        val pingResult = performPing(ipAddress)
         var webSocketResult = false
 
-        if (pingResult == true) {
+        if (pingResult) {
             updateSteps("✅", true)
         } else {
-            updateSteps("❌", true)
+            updateSteps("❌ Ping Failed", true)
             connectionSuccess = false
             showExitButton = true
         }
 
-        // Step 2: Try to connect to WebSocket
-        if (pingResult == true) {
+        if (pingResult) {
             updateSteps("Connecting to WebSocket... ")
-
-            webSocketResult = webSocketManager.connectToWebSocket(
+            // Corrected: Removed analyticsLogger from the call, as webSocketMngr has it via constructor
+            webSocketResult = webSocketMngr.connectToWebSocket(
                 "ws://$ipAddress", sharedState, heartbeatFrequency, debugViewModel, robotName
             )
 
             if (!webSocketResult) {
-                updateSteps("❌", true)
+                updateSteps("❌ Connection Failed", true)
                 connectionSuccess = false
                 showExitButton = true
             } else {
@@ -723,7 +783,6 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
             }
         }
 
-        // Step 3: Wait for a valid JSON file
         if (webSocketResult) {
             updateSteps("Waiting for JSON file... ")
             val jsonReceived = withTimeoutOrNull(5000) {
@@ -736,16 +795,19 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
             if (jsonReceived == true) {
                 updateSteps("✅", true)
             } else {
-                updateSteps("❌", true)
+                updateSteps("❌ No JSON Response", true)
                 connectionSuccess = false
                 showExitButton = true
             }
         }
 
-        delay(2000)
+        delay(1000) // Shorter delay to see final status before navigating or showing exit
 
         if (connectionSuccess) {
-            navController.navigate("control")
+            navController.navigate("control") { popUpTo("landing") { inclusive = false } }
+        } else {
+            // Ensure exit button is shown if any step failed and connectionSuccess is false
+            showExitButton = true
         }
     }
 
@@ -756,8 +818,10 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimary)
-            Spacer(modifier = Modifier.height(16.dp))
+            if (!showExitButton) { // Only show progress if not yet failed
+                CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimary)
+                Spacer(modifier = Modifier.height(16.dp))
+            }
             Text(
                 text = debugText,
                 color = MaterialTheme.colorScheme.onPrimary,
@@ -775,18 +839,18 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
             }
 
             if (showExitButton) {
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(24.dp))
                 Button(
-                    onClick = { navController.navigate("landing") },
+                    onClick = { navController.navigate("landing") { popUpTo("landing") { inclusive = true } } },
                     modifier = Modifier
-                        .padding(0.dp)
-                        .fillMaxWidth(0.9f), // Button width set to 80% of the screen width
-                    colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.secondary), // Black button color
-                    shape = RectangleShape // Rectangular shape
+                        .padding(horizontal = 32.dp)
+                        .fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.secondary),
+                    shape = RectangleShape
                 ) {
                     Text(
-                        "Exit",
-                        color = MaterialTheme.colorScheme.onSecondary, // Text color set to white to contrast the black button
+                        "Exit to Landing",
+                        color = MaterialTheme.colorScheme.onSecondary,
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
@@ -825,7 +889,7 @@ fun AddConnectConfigScreen(navController: NavController, viewModel: ConnectConfi
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
+                .padding(paddingValues) // This already includes status bar padding
                 .padding(16.dp)
                 .background(MaterialTheme.colorScheme.primary)
         ) {
@@ -960,7 +1024,7 @@ fun AddConnectConfigScreen(navController: NavController, viewModel: ConnectConfi
             // Display saved configurations with icons
             LazyColumn {
                 items(configs) { config ->
-                    val icon = IconMapper.getIconById(config.iconId)
+                    val iconToDisplay = IconMapper.getIconById(config.iconId)
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -974,7 +1038,7 @@ fun AddConnectConfigScreen(navController: NavController, viewModel: ConnectConfi
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             DisplayIcon(
-                                icon,
+                                iconToDisplay,
                                 modifier = Modifier.size(40.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))

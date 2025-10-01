@@ -65,9 +65,9 @@ import co.yml.charts.ui.linechart.model.ShadowUnderLine
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-fun ControlScreen(navController: NavController) {
+fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager) { // Added webSocketMngr parameter
     BackHandler {
-        webSocketManager.disconnect()
+        webSocketMngr.disconnect() // Use passed webSocketMngr
         navController.navigate("landing")
     }
 
@@ -94,12 +94,12 @@ fun ControlScreen(navController: NavController) {
                     .size(10.dp)
                     .background(indicatorColor, shape = CircleShape)
             )
-            Spacer(modifier = Modifier.width(4.dp)) // Reduced spacer
+            Spacer(modifier = Modifier.width(4.dp))
             Text(
                 text = statusText,
                 color = MaterialTheme.colorScheme.onSurface,
                 style = MaterialTheme.typography.bodySmall,
-                maxLines = 1 // Ensure text stays on a single line
+                maxLines = 1
             )
         }
     }
@@ -107,14 +107,13 @@ fun ControlScreen(navController: NavController) {
     @Composable
     fun PacketLossIndicator(percentage: Float, modifier: Modifier = Modifier) {
         val lossText = "Loss: ${percentage.toInt()}%"
-        // Optionally, change color based on loss value
         val textColor = if (percentage > 30f) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
 
         Text(
             text = lossText,
             color = textColor,
             style = MaterialTheme.typography.bodySmall,
-            maxLines = 1, // Ensure text stays on a single line
+            maxLines = 1,
             modifier = modifier
                 .clip(RoundedCornerShape(8.dp))
                 .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.8f))
@@ -353,7 +352,7 @@ fun ControlScreen(navController: NavController) {
     }
 
     @Composable
-    fun DynamicUI(jsonString: String) {
+    fun DynamicUI(jsonString: String, webSocketInterface: WebSocketManager) { // Added webSocketInterface parameter
         val config = remember { json.decodeFromString<LinkConfig>(jsonString) }
 
         GridLayout { gridSize, offset ->
@@ -362,17 +361,17 @@ fun ControlScreen(navController: NavController) {
                     when (element.type) {
                         "button" -> ButtonElement(
                             element, gridSize, offset,
-                            onPress = { cmd -> webSocketManager.sendCommand(cmd) },
-                            onRelease = { cmd -> webSocketManager.sendCommand("!$cmd") }
+                            onPress = { cmd -> webSocketInterface.sendCommand(cmd) }, // Use webSocketInterface
+                            onRelease = { cmd -> webSocketInterface.sendCommand("!$cmd") } // Use webSocketInterface
                         )
                         "joystick" -> JoystickElement(
                             element, gridSize, offset,
-                            onMove = { x, y -> webSocketManager.sendMovementCommand(x, y) }
+                            onMove = { x, y -> webSocketInterface.sendMovementCommand(x, y) } // Use webSocketInterface
                         )
                         "slider" -> SliderElement(
                             element, gridSize, offset,
                             onValueChange = { command, value ->
-                                webSocketManager.sendSliderCommand(command, value)
+                                webSocketInterface.sendSliderCommand(command, value) // Use webSocketInterface
                             }
                         )
                     }
@@ -402,7 +401,7 @@ fun ControlScreen(navController: NavController) {
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onPrimary,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.weight(1f) // Reduced weight for robotName to give more to sides
+                modifier = Modifier.weight(1f)
             )
             PacketLossIndicator(
                 percentage = sharedState.packetLossPercentage,
@@ -417,7 +416,7 @@ fun ControlScreen(navController: NavController) {
             contentAlignment = Alignment.Center
         ) {
             if (receivedJsonData.isNotEmpty()) {
-                DynamicUI(receivedJsonData)
+                DynamicUI(receivedJsonData, webSocketMngr) // Pass webSocketMngr to DynamicUI
             } else {
                 Text("No JSON file received!")
             }
@@ -466,8 +465,8 @@ fun RpmChartScreen(rpmData: List<Point>) {
     if (rpmData.isEmpty()) return
 
     val steps = 5
-    val yMin = rpmData.minOf { it.y }
-    val yMax = rpmData.maxOf { it.y }
+    val yMin = rpmData.minOfOrNull { it.y } ?: 0f // Safe min
+    val yMax = rpmData.maxOfOrNull { it.y } ?: 0f // Safe max
     val yRange = yMax - yMin
     val safeRange = if (yRange == 0f) 1f else yRange
 
@@ -484,8 +483,8 @@ fun RpmChartScreen(rpmData: List<Point>) {
     val xAxisData = AxisData.Builder()
         .axisStepSize(100.dp)
         .backgroundColor(MaterialTheme.colorScheme.primary)
-        .steps(rpmData.size - 1)
-        .labelData { "" }
+        .steps(rpmData.size.coerceAtLeast(1) -1) // Ensure steps is not negative
+        .labelData { "" } 
         .labelAndAxisLinePadding(0.dp)
         .build()
 
@@ -530,5 +529,9 @@ fun SettingsScreen(navController: NavController) {
         Modifier.background(MaterialTheme.colorScheme.primary),
         topBar = { },
     ) {
+        // TODO: Implement Settings Screen UI
+        Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+            Text("Settings Screen Placeholder", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onPrimary)
+        }
     }
 }
