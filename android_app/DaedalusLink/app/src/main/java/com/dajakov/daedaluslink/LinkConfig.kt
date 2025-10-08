@@ -20,7 +20,6 @@ data class InterfaceData(
     val label: String,
     val position: List<Int>,
     val size: List<Int>,
-    val pressCommand: String,
-    val releaseCommand: String? = null, // releaseCommand = pressCommand if not defined
+    val command: String,
     val axes: List<String>? = null  // Optional, since it may not always be present
 )

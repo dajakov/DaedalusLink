@@ -136,8 +136,8 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
         val isPressed by interactionSource.collectIsPressedAsState()
 
         LaunchedEffect(isPressed) {
-            if (isPressed) onPress(element.pressCommand)
-            else onRelease(element.pressCommand)
+            if (isPressed) onPress(element.command)
+            else onRelease(element.command)
         }
 
         Box(
@@ -168,7 +168,7 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
         element: InterfaceData,
         gridSize: Pair<Dp, Dp>,
         offset: Pair<Dp, Dp>,
-        onMove: (Byte, Byte) -> Unit
+        onMove: (String, Byte, Byte) -> Unit
     ) {
         val (cellWidth, cellHeight) = gridSize
         val (offsetX, offsetY) = offset
@@ -204,7 +204,7 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
                             onDragEnd = {
                                 offsetXInternal = 0f
                                 offsetYInternal = 0f
-                                onMove(0, 0)
+                                onMove(element.command, 0, 0)
                             },
                             onDrag = { _, dragAmount ->
                                 val maxOffsetX = size.width / 2f - joystickRadiusPx
@@ -220,7 +220,7 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
                                 val normalizedY = ((offsetYInternal / maxOffsetY) * 127).toInt()
                                     .coerceIn(-128, 127).toByte()
 
-                                onMove(normalizedX, normalizedY)
+                                onMove(element.command, normalizedX, normalizedY)
                             }
                         )
                     }
@@ -290,7 +290,7 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
                         sliderPositionNormalized = newPositionNormalized
 
                         val byteValue = (sliderPositionNormalized * 255f - 128f).toInt().coerceIn(-128, 127).toByte()
-                        onValueChange(element.pressCommand, byteValue)
+                        onValueChange(element.command, byteValue)
                         change.consume()
                     }
                 },
@@ -352,7 +352,7 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
     }
 
     @Composable
-    fun DynamicUI(jsonString: String, webSocketInterface: WebSocketManager) { // Added webSocketInterface parameter
+    fun DynamicUI(jsonString: String, webSocketInterface: WebSocketManager) {
         val config = remember { json.decodeFromString<LinkConfig>(jsonString) }
 
         GridLayout { gridSize, offset ->
@@ -361,17 +361,17 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
                     when (element.type) {
                         "button" -> ButtonElement(
                             element, gridSize, offset,
-                            onPress = { cmd -> webSocketInterface.sendCommand(cmd) }, // Use webSocketInterface
-                            onRelease = { cmd -> webSocketInterface.sendCommand("!$cmd") } // Use webSocketInterface
+                            onPress = { cmd -> webSocketInterface.sendCommand(cmd) },
+                            onRelease = { cmd -> webSocketInterface.sendCommand("!$cmd") }
                         )
                         "joystick" -> JoystickElement(
                             element, gridSize, offset,
-                            onMove = { x, y -> webSocketInterface.sendMovementCommand(x, y) } // Use webSocketInterface
+                            onMove = {cmd, x, y -> webSocketInterface.sendMovementCommand(cmd, x, y) }
                         )
                         "slider" -> SliderElement(
                             element, gridSize, offset,
-                            onValueChange = { command, value ->
-                                webSocketInterface.sendSliderCommand(command, value) // Use webSocketInterface
+                            onValueChange = { cmd, value ->
+                                webSocketInterface.sendSliderCommand(cmd, value)
                             }
                         )
                     }

@@ -83,10 +83,10 @@ class MainActivity : ComponentActivity() {
         "UnusedMaterial3ScaffoldPaddingParameter")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge() // Enable edge-to-edge display
+        enableEdgeToEdge()
 
         analyticsLogger = getAnalyticsProvider(applicationContext).getLogger()
-        webSocketManager = WebSocketManager(analyticsLogger) // Initialize WebSocketManager with logger
+        webSocketManager = WebSocketManager(analyticsLogger)
 
 //        resetDatabase(applicationContext) //TODO(remove for production) for development purposes only.
 
@@ -111,7 +111,7 @@ class MainActivity : ComponentActivity() {
 
                 SideEffect {
                     val window = this.window
-                    window.statusBarColor = AndroidColor.TRANSPARENT // Make status bar transparent
+                    window.statusBarColor = AndroidColor.TRANSPARENT
                     WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !isPrimaryColorDark
                 }
 

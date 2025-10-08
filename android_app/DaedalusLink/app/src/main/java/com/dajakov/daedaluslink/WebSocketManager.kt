@@ -54,7 +54,7 @@ class WebSocketManager(private val analyticsLogger: AnalyticsLogger?) { // Added
     }
 
     suspend fun connectToWebSocket(url: String, sharedState: SharedState, heartbeatFrequency: Long,
-                                   debugViewModel: DebugViewModel, robotName: String): Boolean { // Removed analyticsLogger parameter
+                                   debugViewModel: DebugViewModel, robotName: String): Boolean {
         currentUrl = url
         currentSharedState = sharedState
         currentHeartbeatFrequency = heartbeatFrequency
@@ -226,16 +226,12 @@ class WebSocketManager(private val analyticsLogger: AnalyticsLogger?) { // Added
         connectionStartTime = 0L
     }
 
-    fun sendMovementCommand(x: Byte, y: Byte) {
-        sendCommand("move $x,$y")
+    fun sendMovementCommand(command: String, x: Byte, y: Byte) {
+        sendCommand("$command $x,$y")
     }
 
-    fun sendSliderCommand(commandId: String, value: Byte) {
-        sendCommand("slider$commandId $value")
-    }
-
-    fun sendCommandToRobot(command: String) {
-        sendCommand(command)
+    fun sendSliderCommand(command: String, value: Byte) {
+        sendCommand("$command $value")
     }
 
     fun sendCommand(command: String) {
@@ -263,8 +259,7 @@ class WebSocketManager(private val analyticsLogger: AnalyticsLogger?) { // Added
                 delay(resendDelay)
                 val currentTime = System.currentTimeMillis()
                 if (sharedState.isConnected && lastCommand != null && (currentTime - lastCommandTimestamp > resendDelay)) {
-                    println("Resending last command: $lastCommand")
-                    sendCommand(lastCommand!!)
+                    sendCommand("ack")
                 }
             }
             println("ResendChecker stopped.")
@@ -277,11 +272,13 @@ class WebSocketManager(private val analyticsLogger: AnalyticsLogger?) { // Added
                 try {
                     val json = JSONObject(message)
                     val type = json.getString("type")
-                    val payload = json.get("payload")
+                    val payload = json.opt("payload")
 
                     when (type) {
                         "config" -> {
-                            ss.receivedJsonData = payload.toString()
+                            if (payload != null) {
+                                ss.receivedJsonData = payload.toString()
+                            }
                             ss.isJsonReceived = true
                             println("Received config: $payload")
                         }
