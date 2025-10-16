@@ -534,7 +534,7 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
                 .padding(bottom = 16.dp)
         ) {
             Text(
-                text = "1.2.0-alpha", // TODO: Use BuildConfig.VERSION_NAME
+                text = "1.3.0-beta", // TODO: Use BuildConfig.VERSION_NAME
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 12.sp,
                 modifier = Modifier.align(Alignment.Center)
@@ -581,27 +581,27 @@ fun AppSettingsScreen(navController: NavController) {
                     color = MaterialTheme.colorScheme.onBackground
                 )
             }
-            item {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text("Dark Mode", color = MaterialTheme.colorScheme.onBackground)
-                    Switch(
-                        checked = isDarkMode,
-                        onCheckedChange = { isDarkMode = it },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = MaterialTheme.colorScheme.primary,
-                            checkedTrackColor = MaterialTheme.colorScheme.primaryContainer,
-                            uncheckedThumbColor = MaterialTheme.colorScheme.outline,
-                            uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant
-                        )
-                    )
-                }
-            }
+//            item {
+//                Row(
+//                    modifier = Modifier
+//                        .fillMaxWidth()
+//                        .padding(vertical = 8.dp),
+//                    verticalAlignment = Alignment.CenterVertically,
+//                    horizontalArrangement = Arrangement.SpaceBetween
+//                ) {
+//                    Text("Dark Mode", color = MaterialTheme.colorScheme.onBackground)
+//                    Switch(
+//                        checked = isDarkMode,
+//                        onCheckedChange = { isDarkMode = it },
+//                        colors = SwitchDefaults.colors(
+//                            checkedThumbColor = MaterialTheme.colorScheme.primary,
+//                            checkedTrackColor = MaterialTheme.colorScheme.primaryContainer,
+//                            uncheckedThumbColor = MaterialTheme.colorScheme.outline,
+//                            uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant
+//                        )
+//                    )
+//                }
+//            }
 
             // --- App Information ---
             item {
@@ -613,10 +613,10 @@ fun AppSettingsScreen(navController: NavController) {
                 )
             }
             item {
-                InfoRow("App Version", "1.2.0-alpha") // Example version
+                InfoRow("App Version", "1.3.0-beta")
             }
             item {
-                InfoRow("Build Number", "100") // Example build number, TODO: Use BuildConfig.VERSION_CODE
+                InfoRow("Build Number", "130") // Example build number, TODO: Use BuildConfig.VERSION_CODE
                 HorizontalDivider(
                     modifier = Modifier.padding(vertical = 16.dp),
                     thickness = DividerDefaults.Thickness,
@@ -646,7 +646,7 @@ fun AppSettingsScreen(navController: NavController) {
                         .padding(vertical = 8.dp)
                         .clickable {
                             try {
-                                uriHandler.openUri("https://dajakov.com/privacy") // Placeholder URL
+                                uriHandler.openUri("https://dajakov.com/projects/daedalusLink/privacy") // Placeholder URL
                             } catch (e: Exception) {
                                 // Handle error, e.g., show a toast
                             }
@@ -655,27 +655,27 @@ fun AppSettingsScreen(navController: NavController) {
                     fontWeight = FontWeight.Bold
                 )
             }
-            item {
-                 Text(
-                    text = "Report an Issue",
-                    modifier = Modifier
-                        .padding(vertical = 8.dp)
-                        .clickable {
-                             try {
-                                uriHandler.openUri("https://dajakov.com/report-issue") // Placeholder URL
-                            } catch (e: Exception) {
-                                // Handle error, e.g., show a toast
-                            }
-                        },
-                    color = MaterialTheme.colorScheme.tertiary,
-                    fontWeight = FontWeight.Bold
-                )
-                HorizontalDivider(
-                    modifier = Modifier.padding(vertical = 16.dp),
-                    thickness = DividerDefaults.Thickness,
-                    color = DividerDefaults.color
-                )
-            }
+//            item {
+//                 Text(
+//                    text = "Report an Issue",
+//                    modifier = Modifier
+//                        .padding(vertical = 8.dp)
+//                        .clickable {
+//                             try {
+//                                uriHandler.openUri("https://dajakov.com/report-issue") // Placeholder URL
+//                            } catch (e: Exception) {
+//                                // Handle error, e.g., show a toast
+//                            }
+//                        },
+//                    color = MaterialTheme.colorScheme.tertiary,
+//                    fontWeight = FontWeight.Bold
+//                )
+//                HorizontalDivider(
+//                    modifier = Modifier.padding(vertical = 16.dp),
+//                    thickness = DividerDefaults.Thickness,
+//                    color = DividerDefaults.color
+//                )
+//            }
              item {
                 Spacer(modifier = Modifier.height(50.dp)) // Add some space at the bottom
             }
