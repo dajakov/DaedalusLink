@@ -49,19 +49,19 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.times
 import androidx.navigation.NavController
-import co.yml.charts.axis.AxisData
-import co.yml.charts.common.extensions.formatToSinglePrecision
-import co.yml.charts.common.model.Point
-import co.yml.charts.ui.linechart.LineChart
-import co.yml.charts.ui.linechart.model.GridLines
-import co.yml.charts.ui.linechart.model.IntersectionPoint
-import co.yml.charts.ui.linechart.model.Line
-import co.yml.charts.ui.linechart.model.LineChartData
-import co.yml.charts.ui.linechart.model.LinePlotData
-import co.yml.charts.ui.linechart.model.LineStyle
-import co.yml.charts.ui.linechart.model.SelectionHighlightPoint
-import co.yml.charts.ui.linechart.model.SelectionHighlightPopUp
-import co.yml.charts.ui.linechart.model.ShadowUnderLine
+//import co.yml.charts.axis.AxisData
+//import co.yml.charts.common.extensions.formatToSinglePrecision
+//import co.yml.charts.common.model.Point
+//import co.yml.charts.ui.linechart.LineChart
+//import co.yml.charts.ui.linechart.model.GridLines
+//import co.yml.charts.ui.linechart.model.IntersectionPoint
+//import co.yml.charts.ui.linechart.model.Line
+//import co.yml.charts.ui.linechart.model.LineChartData
+//import co.yml.charts.ui.linechart.model.LinePlotData
+//import co.yml.charts.ui.linechart.model.LineStyle
+//import co.yml.charts.ui.linechart.model.SelectionHighlightPoint
+//import co.yml.charts.ui.linechart.model.SelectionHighlightPopUp
+//import co.yml.charts.ui.linechart.model.ShadowUnderLine
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -427,7 +427,7 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @Composable
 fun DebugScreen(navController: NavController, debugViewModel: DebugViewModel) {
-    val debugData = debugViewModel.debugData
+//    val debugData = debugViewModel.debugData
 
     BackHandler {
         navController.navigate("landing")
@@ -444,79 +444,79 @@ fun DebugScreen(navController: NavController, debugViewModel: DebugViewModel) {
             Text("Debug Charts", style = MaterialTheme.typography.headlineMedium)
             Spacer(modifier = Modifier.height(16.dp))
 
-            if (debugData.isEmpty()) {
-                Text("Waiting for debug data...")
-            } else {
-                debugData.forEach { (key, points) ->
-                    if (points.isNotEmpty()) {
-                        Text(text = key.replaceFirstChar { it.uppercase() },
-                            style = MaterialTheme.typography.titleMedium)
-                        RpmChartScreen(rpmData = points)
-                        Spacer(modifier = Modifier.height(24.dp))
-                    }
-                }
-            }
+//            if (debugData.isEmpty()) {
+//                Text("Waiting for debug data...")
+//            } else {
+//                debugData.forEach { (key, points) ->
+//                    if (points.isNotEmpty()) {
+//                        Text(text = key.replaceFirstChar { it.uppercase() },
+//                            style = MaterialTheme.typography.titleMedium)
+//                        RpmChartScreen(rpmData = points)
+//                        Spacer(modifier = Modifier.height(24.dp))
+//                    }
+//                }
+//            }
         }
     }
 }
 
-@Composable
-fun RpmChartScreen(rpmData: List<Point>) {
-    if (rpmData.isEmpty()) return
-
-    val steps = 5
-    val yMin = rpmData.minOfOrNull { it.y } ?: 0f // Safe min
-    val yMax = rpmData.maxOfOrNull { it.y } ?: 0f // Safe max
-    val yRange = yMax - yMin
-    val safeRange = if (yRange == 0f) 1f else yRange
-
-    val yAxisData = AxisData.Builder()
-        .steps(steps)
-        .backgroundColor(MaterialTheme.colorScheme.primary)
-        .labelAndAxisLinePadding(20.dp)
-        .labelData { i ->
-            val yScale = safeRange / steps
-            ((i * yScale) + yMin).formatToSinglePrecision()
-        }
-        .build()
-
-    val xAxisData = AxisData.Builder()
-        .axisStepSize(100.dp)
-        .backgroundColor(MaterialTheme.colorScheme.primary)
-        .steps(rpmData.size.coerceAtLeast(1) -1) // Ensure steps is not negative
-        .labelData { "" } 
-        .labelAndAxisLinePadding(0.dp)
-        .build()
-
-    val lineChartData = LineChartData(
-        linePlotData = LinePlotData(
-            lines = listOf(
-                Line(
-                    dataPoints = rpmData,
-                    lineStyle = LineStyle(),
-                    intersectionPoint = IntersectionPoint(),
-                    selectionHighlightPoint = SelectionHighlightPoint(),
-                    shadowUnderLine = ShadowUnderLine(),
-                    selectionHighlightPopUp = SelectionHighlightPopUp()
-                )
-            )
-        ),
-        xAxisData = xAxisData,
-        yAxisData = yAxisData,
-        gridLines = GridLines(),
-        backgroundColor = MaterialTheme.colorScheme.primary
-    )
-
-    Column(Modifier.fillMaxWidth().padding(8.dp)) {
-        LineChart(
-            modifier = Modifier
-                .background(MaterialTheme.colorScheme.primary)
-                .fillMaxWidth()
-                .height(250.dp),
-            lineChartData = lineChartData
-        )
-    }
-}
+//@Composable
+//fun RpmChartScreen(rpmData: List<Point>) {
+//    if (rpmData.isEmpty()) return
+//
+//    val steps = 5
+//    val yMin = rpmData.minOfOrNull { it.y } ?: 0f // Safe min
+//    val yMax = rpmData.maxOfOrNull { it.y } ?: 0f // Safe max
+//    val yRange = yMax - yMin
+//    val safeRange = if (yRange == 0f) 1f else yRange
+//
+//    val yAxisData = AxisData.Builder()
+//        .steps(steps)
+//        .backgroundColor(MaterialTheme.colorScheme.primary)
+//        .labelAndAxisLinePadding(20.dp)
+//        .labelData { i ->
+//            val yScale = safeRange / steps
+//            ((i * yScale) + yMin).formatToSinglePrecision()
+//        }
+//        .build()
+//
+//    val xAxisData = AxisData.Builder()
+//        .axisStepSize(100.dp)
+//        .backgroundColor(MaterialTheme.colorScheme.primary)
+//        .steps(rpmData.size.coerceAtLeast(1) -1) // Ensure steps is not negative
+//        .labelData { "" }
+//        .labelAndAxisLinePadding(0.dp)
+//        .build()
+//
+//    val lineChartData = LineChartData(
+//        linePlotData = LinePlotData(
+//            lines = listOf(
+//                Line(
+//                    dataPoints = rpmData,
+//                    lineStyle = LineStyle(),
+//                    intersectionPoint = IntersectionPoint(),
+//                    selectionHighlightPoint = SelectionHighlightPoint(),
+//                    shadowUnderLine = ShadowUnderLine(),
+//                    selectionHighlightPopUp = SelectionHighlightPopUp()
+//                )
+//            )
+//        ),
+//        xAxisData = xAxisData,
+//        yAxisData = yAxisData,
+//        gridLines = GridLines(),
+//        backgroundColor = MaterialTheme.colorScheme.primary
+//    )
+//
+//    Column(Modifier.fillMaxWidth().padding(8.dp)) {
+//        LineChart(
+//            modifier = Modifier
+//                .background(MaterialTheme.colorScheme.primary)
+//                .fillMaxWidth()
+//                .height(250.dp),
+//            lineChartData = lineChartData
+//        )
+//    }
+//}
 
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @Composable

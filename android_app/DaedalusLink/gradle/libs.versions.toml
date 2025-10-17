@@ -37,7 +37,6 @@ appcompat = "1.7.1"
 coreSplashscreen = "1.0.1"
 adapters = "3.2.0-alpha11"
 composeTesting = "1.0.0-alpha06"
-ycharts = "2.1.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -85,7 +84,6 @@ androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version
 androidx-core-splashscreen = { group = "androidx.core", name = "core-splashscreen", version.ref = "coreSplashscreen" }
 androidx-adapters = { group = "androidx.databinding", name = "adapters", version.ref = "adapters" }
 androidx-compose-testing = { group = "androidx.xr.compose", name = "compose-testing", version.ref = "composeTesting" }
-ycharts = { module = "co.yml:ycharts", version.ref = "ycharts" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

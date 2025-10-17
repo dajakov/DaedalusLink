@@ -40,17 +40,17 @@ class WebSocketManager(private val analyticsLogger: AnalyticsLogger?) { // Added
         private const val PACKET_LOSS_WINDOW_SIZE = 20 //TODO(make accessible to user)
         private const val PACKET_LOSS_THRESHOLD_PERCENT = 100 //TODO(make accessible to user)
 
-        private const val EVENT_CONNECTION_ESTABLISHED = "connection_established"
-        private const val EVENT_CONNECTION_LOST = "connection_lost"
-        private const val EVENT_RECONNECTION_ATTEMPT = "reconnection_attempt"
-        private const val EVENT_RECONNECTION_SUCCESS = "reconnection_success"
-        private const val EVENT_RECONNECTION_FAILURE = "reconnection_failure"
-        private const val EVENT_HIGH_PACKET_LOSS = "high_packet_loss_detected"
-
-        private const val PARAM_REASON = "reason"
-        private const val PARAM_DURATION_MS = "duration_ms"
-        private const val PARAM_ATTEMPT_NUMBER = "attempt_number"
-        private const val PARAM_LOSS_PERCENTAGE = "loss_percentage"
+//        private const val EVENT_CONNECTION_ESTABLISHED = "connection_established"
+//        private const val EVENT_CONNECTION_LOST = "connection_lost"
+//        private const val EVENT_RECONNECTION_ATTEMPT = "reconnection_attempt"
+//        private const val EVENT_RECONNECTION_SUCCESS = "reconnection_success"
+//        private const val EVENT_RECONNECTION_FAILURE = "reconnection_failure"
+//        private const val EVENT_HIGH_PACKET_LOSS = "high_packet_loss_detected"
+//
+//        private const val PARAM_REASON = "reason"
+//        private const val PARAM_DURATION_MS = "duration_ms"
+//        private const val PARAM_ATTEMPT_NUMBER = "attempt_number"
+//        private const val PARAM_LOSS_PERCENTAGE = "loss_percentage"
     }
 
     suspend fun connectToWebSocket(url: String, sharedState: SharedState, heartbeatFrequency: Long,
@@ -70,10 +70,10 @@ class WebSocketManager(private val analyticsLogger: AnalyticsLogger?) { // Added
         resendDelay = ((1F / heartbeatFrequency.toFloat()) * 1000F).toLong().coerceAtLeast(10L)
         lastCommand = null
 
-        if (isReconnecting.get()) {
-            val params = mapOf(PARAM_ATTEMPT_NUMBER to reconnectAttempts)
-            analyticsLogger?.logEvent(EVENT_RECONNECTION_ATTEMPT, params)
-        }
+//        if (isReconnecting.get()) {
+//            val params = mapOf(PARAM_ATTEMPT_NUMBER to reconnectAttempts)
+//            analyticsLogger?.logEvent(EVENT_RECONNECTION_ATTEMPT, params)
+//        }
 
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
@@ -81,11 +81,11 @@ class WebSocketManager(private val analyticsLogger: AnalyticsLogger?) { // Added
                 currentSharedState?.isConnected = true
                 currentSharedState?.packetLossPercentage = 0f
 
-                if (isReconnecting.get()) {
-                    analyticsLogger?.logEvent(EVENT_RECONNECTION_SUCCESS)
-                } else {
-                    analyticsLogger?.logEvent(EVENT_CONNECTION_ESTABLISHED)
-                }
+//                if (isReconnecting.get()) {
+//                    analyticsLogger?.logEvent(EVENT_RECONNECTION_SUCCESS)
+//                } else {
+//                    analyticsLogger?.logEvent(EVENT_CONNECTION_ESTABLISHED)
+//                }
                 connectionStartTime = System.currentTimeMillis()
                 reconnectAttempts = 0
                 isReconnecting.set(false)
@@ -101,23 +101,23 @@ class WebSocketManager(private val analyticsLogger: AnalyticsLogger?) { // Added
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 println("WebSocket onFailure: ${t.message}")
-                val previouslyConnected = currentSharedState?.isConnected == true
+//                val previouslyConnected = currentSharedState?.isConnected == true
                 currentSharedState?.isConnected = false
                 currentSharedState?.packetLossPercentage = 0f
 
-                val duration = if (connectionStartTime > 0) System.currentTimeMillis() - connectionStartTime else 0L
-                val reason = t.message ?: "unknown_failure"
-                val params = mapOf(
-                    PARAM_REASON to reason,
-                    PARAM_DURATION_MS to duration
-                )
-                if (previouslyConnected) analyticsLogger?.logEvent(EVENT_CONNECTION_LOST, params)
+//                val duration = if (connectionStartTime > 0) System.currentTimeMillis() - connectionStartTime else 0L
+//                val reason = t.message ?: "unknown_failure"
+//                val params = mapOf(
+//                    PARAM_REASON to reason,
+//                    PARAM_DURATION_MS to duration
+//                )
+//                if (previouslyConnected) analyticsLogger?.logEvent(EVENT_CONNECTION_LOST, params)
                 connectionStartTime = 0L
 
-                if (isReconnecting.get() && reconnectAttempts > 0) {
-                     val failureParams = mapOf(PARAM_ATTEMPT_NUMBER to reconnectAttempts)
-                     analyticsLogger?.logEvent(EVENT_RECONNECTION_FAILURE, failureParams)
-                }
+//                if (isReconnecting.get() && reconnectAttempts > 0) {
+//                     val failureParams = mapOf(PARAM_ATTEMPT_NUMBER to reconnectAttempts)
+//                     analyticsLogger?.logEvent(EVENT_RECONNECTION_FAILURE, failureParams)
+//                }
 
                 if (!connectionResult.isCompleted) {
                     connectionResult.complete(false)
@@ -129,16 +129,16 @@ class WebSocketManager(private val analyticsLogger: AnalyticsLogger?) { // Added
 
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
                 println("WebSocket onClosing: Code=$code, Reason='$reason'")
-                val previouslyConnected = currentSharedState?.isConnected == true
+//                val previouslyConnected = currentSharedState?.isConnected == true
                 currentSharedState?.isConnected = false
                 currentSharedState?.packetLossPercentage = 0f
 
-                val duration = if (connectionStartTime > 0) System.currentTimeMillis() - connectionStartTime else 0L
-                val params = mapOf(
-                    PARAM_REASON to "closing_code_$code: $reason",
-                    PARAM_DURATION_MS to duration
-                )
-                if (previouslyConnected) analyticsLogger?.logEvent(EVENT_CONNECTION_LOST, params)
+//                val duration = if (connectionStartTime > 0) System.currentTimeMillis() - connectionStartTime else 0L
+//                val params = mapOf(
+//                    PARAM_REASON to "closing_code_$code: $reason",
+//                    PARAM_DURATION_MS to duration
+//                )
+//                if (previouslyConnected) analyticsLogger?.logEvent(EVENT_CONNECTION_LOST, params)
                 connectionStartTime = 0L
             }
         })
@@ -190,15 +190,15 @@ class WebSocketManager(private val analyticsLogger: AnalyticsLogger?) { // Added
 
         if (sent > 0 && lossPercentage >= PACKET_LOSS_THRESHOLD_PERCENT) {
             println("High packet loss detected (${lossPercentage.toInt()}%). Disconnecting.")
-            val params = mapOf(PARAM_LOSS_PERCENTAGE to lossPercentage)
-            analyticsLogger?.logEvent(EVENT_HIGH_PACKET_LOSS, params)
+//            val params = mapOf(PARAM_LOSS_PERCENTAGE to lossPercentage)
+//            analyticsLogger?.logEvent(EVENT_HIGH_PACKET_LOSS, params)
 
-            val duration = if (connectionStartTime > 0) System.currentTimeMillis() - connectionStartTime else 0L
-            val reasonParams = mapOf(
-                PARAM_REASON to "high_packet_loss",
-                PARAM_DURATION_MS to duration
-            )
-            analyticsLogger?.logEvent(EVENT_CONNECTION_LOST, reasonParams)
+//            val duration = if (connectionStartTime > 0) System.currentTimeMillis() - connectionStartTime else 0L
+//            val reasonParams = mapOf(
+//                PARAM_REASON to "high_packet_loss",
+//                PARAM_DURATION_MS to duration
+//            )
+//            analyticsLogger?.logEvent(EVENT_CONNECTION_LOST, reasonParams)
             connectionStartTime = 0L
 
             currentSharedState?.isConnected = false
@@ -215,14 +215,14 @@ class WebSocketManager(private val analyticsLogger: AnalyticsLogger?) { // Added
         currentSharedState?.isConnected = false
         currentSharedState?.packetLossPercentage = 0f
 
-        if (previouslyConnected) {
-            val duration = if (connectionStartTime > 0) System.currentTimeMillis() - connectionStartTime else 0L
-            val params = mapOf(
-                PARAM_REASON to "user_initiated",
-                PARAM_DURATION_MS to duration
-            )
-            analyticsLogger?.logEvent(EVENT_CONNECTION_LOST, params)
-        }
+//        if (previouslyConnected) {
+//            val duration = if (connectionStartTime > 0) System.currentTimeMillis() - connectionStartTime else 0L
+//            val params = mapOf(
+//                PARAM_REASON to "user_initiated",
+//                PARAM_DURATION_MS to duration
+//            )
+//            analyticsLogger?.logEvent(EVENT_CONNECTION_LOST, params)
+//        }
         connectionStartTime = 0L
     }
 

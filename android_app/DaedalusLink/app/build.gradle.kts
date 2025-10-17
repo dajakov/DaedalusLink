@@ -21,8 +21,8 @@ android {
         applicationId = "com.dajakov.daedaluslink"
         minSdk = 26
         targetSdk = 35
-        versionCode = 130
-        versionName = "1.3.0"
+        versionCode = 131
+        versionName = "1.3.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -97,7 +97,6 @@ dependencies {
     implementation(libs.androidx.adapters)
     implementation(libs.androidx.compose.testing)
     implementation(libs.kotlin.reflect)
-    implementation(libs.ycharts)
     ksp(libs.androidx.room.compiler.v261) // Room compiler with KSP for annotation processing
     implementation(libs.androidx.room.ktx.v261) // Room KTX for Kotlin extension functions
     implementation(libs.gson)

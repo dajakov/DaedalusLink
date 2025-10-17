@@ -85,7 +85,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        analyticsLogger = getAnalyticsProvider(applicationContext).getLogger()
+        analyticsLogger = getAnalyticsProvider(applicationContext).getLogger()!!
         webSocketManager = WebSocketManager(analyticsLogger)
 
 //        resetDatabase(applicationContext) //TODO(remove for production) for development purposes only.
@@ -534,7 +534,7 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
                 .padding(bottom = 16.dp)
         ) {
             Text(
-                text = "1.3.0-beta", // TODO: Use BuildConfig.VERSION_NAME
+                text = "1.3.1-beta", // TODO: Use BuildConfig.VERSION_NAME
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 12.sp,
                 modifier = Modifier.align(Alignment.Center)
@@ -613,10 +613,10 @@ fun AppSettingsScreen(navController: NavController) {
                 )
             }
             item {
-                InfoRow("App Version", "1.3.0-beta")
+                InfoRow("App Version", "1.3.1-beta")
             }
             item {
-                InfoRow("Build Number", "130") // Example build number, TODO: Use BuildConfig.VERSION_CODE
+                InfoRow("Build Number", "131") // Example build number, TODO: Use BuildConfig.VERSION_CODE
                 HorizontalDivider(
                     modifier = Modifier.padding(vertical = 16.dp),
                     thickness = DividerDefaults.Thickness,
