@@ -534,7 +534,7 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
                 .padding(bottom = 16.dp)
         ) {
             Text(
-                text = "1.3.1-beta", // TODO: Use BuildConfig.VERSION_NAME
+                text = "1.3.2-beta", // TODO: Use BuildConfig.VERSION_NAME
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 12.sp,
                 modifier = Modifier.align(Alignment.Center)
@@ -613,10 +613,10 @@ fun AppSettingsScreen(navController: NavController) {
                 )
             }
             item {
-                InfoRow("App Version", "1.3.1-beta")
+                InfoRow("App Version", "1.3.2-beta")
             }
             item {
-                InfoRow("Build Number", "131") // Example build number, TODO: Use BuildConfig.VERSION_CODE
+                InfoRow("Build Number", "132") // Example build number, TODO: Use BuildConfig.VERSION_CODE
                 HorizontalDivider(
                     modifier = Modifier.padding(vertical = 16.dp),
                     thickness = DividerDefaults.Thickness,

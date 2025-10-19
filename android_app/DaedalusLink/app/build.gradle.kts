@@ -21,8 +21,8 @@ android {
         applicationId = "com.dajakov.daedaluslink"
         minSdk = 26
         targetSdk = 35
-        versionCode = 131
-        versionName = "1.3.1"
+        versionCode = 132
+        versionName = "1.3.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -95,7 +95,7 @@ dependencies {
     implementation(libs.androidx.core.splashscreen) // Room runtime library
     implementation(libs.kotlinx.serialization.json.v180)
     implementation(libs.androidx.adapters)
-    implementation(libs.androidx.compose.testing)
+    androidTestImplementation(libs.androidx.compose.testing)
     implementation(libs.kotlin.reflect)
     ksp(libs.androidx.room.compiler.v261) // Room compiler with KSP for annotation processing
     implementation(libs.androidx.room.ktx.v261) // Room KTX for Kotlin extension functions
