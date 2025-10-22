@@ -105,6 +105,7 @@ dependencies {
     debugImplementation(libs.androidx.ui.test.manifest)
     "playstoreImplementation"(platform(libs.firebase.bom))
     "playstoreImplementation"(libs.google.firebase.analytics)
+    "playstoreImplementation"("com.google.android.play:app-update:2.1.0")
 }
 
 android.applicationVariants.all {
