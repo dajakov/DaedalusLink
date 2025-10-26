@@ -68,6 +68,9 @@ import kotlinx.coroutines.withTimeoutOrNull
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextAlign
+import kotlinx.serialization.json.Json
 
 val sharedState = SharedState() // Global shared state
 
@@ -699,8 +702,34 @@ fun InfoRow(label: String, value: String) {
 @Composable
 fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectConfigViewModel,
                   configIndex: Int, linkConfigViewModel: LinkConfigViewModel, linkIndexArgument: Int,
-                  debugViewModel: DebugViewModel, webSocketMngr: WebSocketManager) { // Renamed linkIndex to linkIndexArgument, added webSocketMngr
+                  debugViewModel: DebugViewModel, webSocketMngr: WebSocketManager) {
     BackHandler { }
+
+    fun validateConfig(json: String): Pair<Boolean, String> {
+        return try {
+            val parsed = Json.decodeFromString<LinkConfig>(json)
+
+            if (parsed.interfaceData.isEmpty()) {
+                return false to "interfaceData requires at least 1 control item"
+            }
+
+            parsed.interfaceData.forEachIndexed { index, item ->
+                if (item.command.isEmpty()) {
+                    return false to "interfaceData[$index] has empty 'command'"
+                }
+                if (item.position.size != 2) {
+                    return false to "interfaceData[$index] has invalid 'position'. Must contain exactly 2 ints"
+                }
+                if (item.size.size != 2) {
+                    return false to "interfaceData[$index] has invalid 'size'. Must contain exactly 2 ints"
+                }
+            }
+
+            true to ""
+        } catch (e: Exception) {
+            false to "JSON parsing failed: ${e.message}"
+        }
+    }
 
     val connectConfigs by connectConfigViewModel.allConfigs.collectAsState(initial = emptyList())
     // It's safer to not proceed if connectConfigs is empty early on, though find should handle it.
@@ -731,6 +760,9 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
     var showExitButton by remember { mutableStateOf(false) }
     var steps by remember { mutableStateOf(listOf<String>()) }
 
+    var configError by remember { mutableStateOf<String?>(null) }
+    var showConfigError by remember { mutableStateOf(false) }
+
     fun updateSteps(step: String, isSameLine: Boolean = false) {
         steps = if (isSameLine && steps.isNotEmpty()) {
             val lastStep = steps.last() + " | " + step
@@ -748,6 +780,55 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
                 address.isReachable(2000)
             } catch (_: IOException) {
                 false
+            }
+        }
+    }
+
+    @Composable
+    fun ConfigErrorBox(errorMessage: String) {
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .border(
+                    width = 2.dp,
+                    color = MaterialTheme.colorScheme.onPrimary
+                )
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .padding(16.dp)
+        ) {
+
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "CONFIG VALIDATION FAILED",
+                    color = MaterialTheme.colorScheme.error,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp
+                )
+
+                Spacer(Modifier.height(12.dp))
+
+                Text(
+                    text = errorMessage.trim(),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 13.sp,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(Modifier.height(12.dp))
+
+                Text(
+                    text = "Please verify your robot's config JSON.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 13.sp,
+                    textAlign = TextAlign.Center
+                )
             }
         }
     }
@@ -785,6 +866,7 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
 
         if (webSocketResult) {
             updateSteps("Waiting for JSON file... ")
+
             val jsonReceived = withTimeoutOrNull(5000) {
                 while (!sharedState.isJsonReceived) {
                     delay(500)
@@ -793,13 +875,27 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
             }
 
             if (jsonReceived == true) {
-                updateSteps("✅", true)
+                val json = sharedState.receivedJsonData
+                if (json != null) {
+                    val (valid, errorMsg) = validateConfig(json)
+
+                    if (valid) {
+                        updateSteps("✅", true)
+                    } else {
+                        updateSteps("❌ Invalid JSON", true)
+                        configError = errorMsg
+                        showConfigError = true
+                        connectionSuccess = false
+                        showExitButton = true
+                    }
+                }
             } else {
                 updateSteps("❌ No JSON Response", true)
                 connectionSuccess = false
                 showExitButton = true
             }
         }
+
 
         delay(1000) // Shorter delay to see final status before navigating or showing exit
 
@@ -836,6 +932,11 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
                     color = MaterialTheme.colorScheme.onPrimary,
                     fontSize = 14.sp
                 )
+            }
+
+            if (showConfigError && configError != null) {
+                Spacer(modifier = Modifier.height(16.dp))
+                ConfigErrorBox(errorMessage = configError!!)
             }
 
             if (showExitButton) {
