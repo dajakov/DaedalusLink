@@ -549,7 +549,7 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppSettingsScreen(navController: NavController) {
-    var isDarkMode by remember { mutableStateOf(false) } // TODO: Replace with actual theme state
+//    var isDarkMode by remember { mutableStateOf(false) } // TODO: Replace with actual theme state
     val uriHandler = LocalUriHandler.current
 
     Scaffold(containerColor = MaterialTheme.colorScheme.primary,
@@ -723,6 +723,22 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
                 if (item.size.size != 2) {
                     return false to "interfaceData[$index] has invalid 'size'. Must contain exactly 2 ints"
                 }
+
+                val gridWidth = 8
+                val gridHeight = 14
+
+                val (x, y) = item.position
+                val (w, h) = item.size
+
+                if (x < 0 || y < 0) {
+                    return false to "interfaceData[$index] (${item.label}) position cannot be negative"
+                }
+                if (w <= 0 || h <= 0) {
+                    return false to "interfaceData[$index] (${item.label}) size must be positive"
+                }
+                if (x + w > gridWidth || y + h > gridHeight) {
+                    return false to "interfaceData[$index] (${item.label}) exceeds grid bounds ($gridWidth×$gridHeight)"
+                }
             }
 
             true to ""
@@ -786,7 +802,6 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
 
     @Composable
     fun ConfigErrorBox(errorMessage: String) {
-
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -823,7 +838,7 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
                 Spacer(Modifier.height(12.dp))
 
                 Text(
-                    text = "Please verify your robot's config JSON.",
+                    text = "Please verify your robot's LinkConfig.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontFamily = FontFamily.Monospace,
                     fontSize = 13.sp,
