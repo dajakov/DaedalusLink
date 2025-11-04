@@ -3,6 +3,7 @@ package com.dajakov.daedaluslink
 import android.annotation.SuppressLint
 import android.graphics.Color as AndroidColor
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -70,7 +71,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
+import androidx.room.util.TableInfo
+import kotlinx.coroutines.isActive
 import kotlinx.serialization.json.Json
+import org.json.JSONObject
+import java.net.DatagramPacket
+import java.net.DatagramSocket
 
 val sharedState = SharedState() // Global shared state
 
@@ -316,6 +322,71 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
             listOf("Settings")
     val configIDs = connectConfigs.map { it.id}
 
+    data class RobotDiscovery(
+        val robotId: String,
+        val ip: String,
+        val wsPort: Int,
+        val name: String,
+        val lastSeen: Long
+    )
+
+    val scope = rememberCoroutineScope()
+
+    // --- UDP discovery state ---
+    val discoveredRobots = remember { mutableStateListOf<RobotDiscovery>() }
+
+    // Start UDP discovery listener once
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            try {
+                val socket = DatagramSocket(7777, InetAddress.getByName("0.0.0.0"))
+                socket.broadcast = true
+                val buffer = ByteArray(512)
+
+                while (isActive) {
+                    val packet = DatagramPacket(buffer, buffer.size)
+                    socket.receive(packet)
+
+                    val message = String(packet.data, 0, packet.length)
+                    val ip = packet.address.hostAddress!!
+                    val now = System.currentTimeMillis()
+
+                    try {
+                        val json = JSONObject(message)
+                        val robotId = json.optString("robotId", "Unknown")
+                        val wsPort = json.optInt("wsPort", 8081)
+                        val name = json.optString("name", robotId)
+
+                        // Update or insert
+                        val existing = discoveredRobots.indexOfFirst { it.robotId == robotId }
+                        if (existing >= 0) {
+                            discoveredRobots[existing] = discoveredRobots[existing].copy(lastSeen = now)
+                        } else {
+                            discoveredRobots.add(
+                                RobotDiscovery(
+                                    robotId = robotId,
+                                    ip = ip,
+                                    wsPort = wsPort,
+                                    name = name,
+                                    lastSeen = now
+                                )
+                            )
+                        }
+
+                        // Clean up stale robots
+                        discoveredRobots.removeAll { now - it.lastSeen > 5000 }
+
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
+                socket.close()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
     LaunchedEffect(selectedIndex.intValue) {
         val targetOffset = with(density) {
             val size = if (selectedIndex.intValue == 0) 120.dp else 100.dp
@@ -378,30 +449,83 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
             }
         }
 
-        if (selectedIndex.intValue == 0 || selectedIndex.intValue == iconsList.size - 1) {
-            Box(modifier = Modifier.fillMaxWidth()) {
-                Button(
-                    onClick = {
-                        if (selectedIndex.intValue == 0) {
-                            navController.navigate("addConnectConfig")
-                        } else { // This implies selectedIndex.intValue == iconsList.size - 1
-                            navController.navigate("appSettings")
+        when (selectedIndex.intValue) {
+            0 -> {
+                Column(modifier = Modifier.padding(15.dp)) {
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        Button(
+                            onClick = { navController.navigate("addConnectConfig") },
+                            modifier = Modifier
+                                .padding(15.dp)
+                                .align(Alignment.Center)
+                                .fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.secondary),
+                            shape = RectangleShape
+                        ) {
+                            Text(
+                                "Add a new Robot",
+                                color = MaterialTheme.colorScheme.onSecondary,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
                         }
-                    },
-                    modifier = Modifier
-                        .padding(15.dp)
-                        .align(Alignment.Center)
-                        .fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.secondary),
-                    shape = RectangleShape
-                ) {
-                    if (selectedIndex.intValue == 0){
-                        Text(
-                            "Add a new Robot",
-                            color = MaterialTheme.colorScheme.onSecondary,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    } else {
+                    }
+                    var mExpanded by remember { mutableStateOf(false) }
+                    Column(modifier = Modifier.padding(15.dp)) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .border(1.dp, MaterialTheme.colorScheme.onPrimary, RoundedCornerShape(8.dp))
+                                .clickable { mExpanded = true }
+                                .padding(16.dp)
+                        ) {
+                            Text(
+                                text = if (discoveredRobots.isNotEmpty()) "Select Robot" else "No robots found",
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                            Icon(
+                                imageVector = if (mExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                                contentDescription = "Dropdown icon",
+                                modifier = Modifier.align(Alignment.CenterEnd),
+                                tint = MaterialTheme.colorScheme.onPrimary
+                            )
+                        }
+
+                        DropdownMenu(
+                            expanded = mExpanded,
+                            onDismissRequest = { mExpanded = false },
+                            modifier = Modifier.width(200.dp)
+                        ) {
+                            discoveredRobots.forEachIndexed { index, robot ->
+                                DropdownMenuItem(
+                                    onClick = {
+                                        linkIndex = index
+                                        mExpanded = false
+                                    },
+                                    text = { Text(robot.name, color = MaterialTheme.colorScheme.onPrimary) }
+                                )
+                            }
+
+                            if (discoveredRobots.isEmpty()) {
+                                DropdownMenuItem(
+                                    onClick = { mExpanded = false },
+                                    text = { Text("No robots found", color = MaterialTheme.colorScheme.onPrimary) }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            iconsList.size - 1 -> {
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    Button(
+                        onClick = { navController.navigate("appSettings") },
+                        modifier = Modifier
+                            .padding(15.dp)
+                            .align(Alignment.Center)
+                            .fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.secondary),
+                        shape = RectangleShape
+                    ) {
                         Text(
                             "App settings",
                             color = MaterialTheme.colorScheme.onSecondary,
@@ -410,71 +534,48 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
                     }
                 }
             }
-        } else {
-            var mExpanded by remember { mutableStateOf(false) }
-            val linkConfigs by linkConfigViewModel.allConfigs.collectAsState(initial = emptyList())
-            val configNames = linkConfigs.map { it.name } + "Auto-Pull from Robot"
-            val iconDropdown = if (mExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown
+            else -> {
+                var mExpanded by remember { mutableStateOf(false) }
+                val linkConfigs by linkConfigViewModel.allConfigs.collectAsState(initial = emptyList())
+                val configNames = linkConfigs.map { it.name } + "Auto-Pull from Robot"
+                val iconDropdown = if (mExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown
 
-            Column(Modifier.padding(15.dp)) {
-                Text("Select Link Config", modifier = Modifier.padding(bottom = 5.dp), color = MaterialTheme.colorScheme.onPrimary)
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(1.dp, MaterialTheme.colorScheme.onPrimary, RoundedCornerShape(8.dp))
-                        .clickable { mExpanded = !mExpanded }
-                        .padding(16.dp)
-                ) {
-                    Text(
-                        text = configNames.getOrNull(linkIndex) ?: "[Auto-Pull from Robot]",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onPrimary
-                    )
-                    Icon(
-                        imageVector = iconDropdown,
-                        contentDescription = "Dropdown icon",
-                        modifier = Modifier.align(Alignment.CenterEnd).padding(5.dp),
-                        tint = MaterialTheme.colorScheme.onPrimary
-                    )
-                }
-                DropdownMenu(
-                    expanded = mExpanded,
-                    onDismissRequest = { mExpanded = false },
-                    modifier = Modifier.width(200.dp).padding(top = 8.dp)
-                ) {
-                    configNames.forEachIndexed { index, name ->
-                        DropdownMenuItem(
-                            onClick = {
-                                linkIndex = if (index == configNames.lastIndex) -1 else index
-                                mExpanded = false
-                            },
-                            text = { Text(text = name, color = MaterialTheme.colorScheme.onPrimary) }
+                Column(Modifier.padding(15.dp)) {
+                    Text("Select Link Config", modifier = Modifier.padding(bottom = 5.dp), color = MaterialTheme.colorScheme.onPrimary)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, MaterialTheme.colorScheme.onPrimary, RoundedCornerShape(8.dp))
+                            .clickable { mExpanded = !mExpanded }
+                            .padding(16.dp)
+                    ) {
+                        Text(
+                            text = configNames.getOrNull(linkIndex) ?: "[Auto-Pull from Robot]",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                        Icon(
+                            imageVector = iconDropdown,
+                            contentDescription = "Dropdown icon",
+                            modifier = Modifier.align(Alignment.CenterEnd).padding(5.dp),
+                            tint = MaterialTheme.colorScheme.onPrimary
                         )
                     }
-                }
-            }
-            Box(modifier = Modifier.fillMaxWidth()) {
-                Button(
-                    onClick = {                         val actualConfigId = configIDs.getOrNull(selectedIndex.intValue - 1)
-                        if (actualConfigId != null) {
-                           navController.navigate("loading/$actualConfigId/$linkIndex")
-                        } else {
-                            // Handle error: No valid config selected, or placeholder was clicked
-                            println("Error: No valid robot configuration selected for connection.")
+                    DropdownMenu(
+                        expanded = mExpanded,
+                        onDismissRequest = { mExpanded = false },
+                        modifier = Modifier.width(200.dp).padding(top = 8.dp)
+                    ) {
+                        configNames.forEachIndexed { index, name ->
+                            DropdownMenuItem(
+                                onClick = {
+                                    linkIndex = if (index == configNames.lastIndex) -1 else index
+                                    mExpanded = false
+                                },
+                                text = { Text(text = name, color = MaterialTheme.colorScheme.onPrimary) }
+                            )
                         }
-                    },
-                    modifier = Modifier
-                        .padding(0.dp)
-                        .align(Alignment.Center)
-                        .fillMaxWidth(0.9f),
-                    colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.secondary),
-                    shape = RectangleShape
-                ) {
-                    Text(
-                        "Connect to Robot",
-                        color = MaterialTheme.colorScheme.onSecondary,
-                        style = MaterialTheme.typography.bodyMedium
-                    )
+                    }
                 }
             }
         }
