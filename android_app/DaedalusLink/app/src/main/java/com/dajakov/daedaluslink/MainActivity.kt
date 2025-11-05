@@ -3,7 +3,6 @@ package com.dajakov.daedaluslink
 import android.annotation.SuppressLint
 import android.graphics.Color as AndroidColor
 import android.os.Bundle
-import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -71,12 +70,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
-import androidx.room.util.TableInfo
-import kotlinx.coroutines.isActive
+import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.serialization.json.Json
-import org.json.JSONObject
-import java.net.DatagramPacket
-import java.net.DatagramSocket
 
 val sharedState = SharedState() // Global shared state
 
@@ -322,67 +317,35 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
             listOf("Settings")
     val configIDs = connectConfigs.map { it.id}
 
-    data class RobotDiscovery(
-        val robotId: String,
-        val ip: String,
-        val wsPort: Int,
-        val name: String,
-        val lastSeen: Long
-    )
+    @Composable
+    fun RobotDropdown(
+        viewModel: DiscoveryViewModel = viewModel(),
+        mExpanded: Boolean,
+        onDismiss: () -> Unit,
+        onSelect: (RobotDiscovery) -> Unit
+    ) {
+        val discoveredRobots by viewModel.robots.collectAsState()
 
-    val scope = rememberCoroutineScope()
-
-    // --- UDP discovery state ---
-    val discoveredRobots = remember { mutableStateListOf<RobotDiscovery>() }
-
-    // Start UDP discovery listener once
-    LaunchedEffect(Unit) {
-        withContext(Dispatchers.IO) {
-            try {
-                val socket = DatagramSocket(7777, InetAddress.getByName("0.0.0.0"))
-                socket.broadcast = true
-                val buffer = ByteArray(512)
-
-                while (isActive) {
-                    val packet = DatagramPacket(buffer, buffer.size)
-                    socket.receive(packet)
-
-                    val message = String(packet.data, 0, packet.length)
-                    val ip = packet.address.hostAddress!!
-                    val now = System.currentTimeMillis()
-
-                    try {
-                        val json = JSONObject(message)
-                        val robotId = json.optString("robotId", "Unknown")
-                        val wsPort = json.optInt("wsPort", 8081)
-                        val name = json.optString("name", robotId)
-
-                        // Update or insert
-                        val existing = discoveredRobots.indexOfFirst { it.robotId == robotId }
-                        if (existing >= 0) {
-                            discoveredRobots[existing] = discoveredRobots[existing].copy(lastSeen = now)
-                        } else {
-                            discoveredRobots.add(
-                                RobotDiscovery(
-                                    robotId = robotId,
-                                    ip = ip,
-                                    wsPort = wsPort,
-                                    name = name,
-                                    lastSeen = now
-                                )
-                            )
-                        }
-
-                        // Clean up stale robots
-                        discoveredRobots.removeAll { now - it.lastSeen > 5000 }
-
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                    }
+        DropdownMenu(
+            expanded = mExpanded,
+            onDismissRequest = onDismiss,
+            modifier = Modifier
+                .width(screenWidth - 60.dp)
+                .background(MaterialTheme.colorScheme.onSurfaceVariant)
+                .border(1.dp, MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
+        ) {
+            if (discoveredRobots.isEmpty()) {
+                DropdownMenuItem(
+                    text = { Text("No robots found", color = MaterialTheme.colorScheme.onSurface) },
+                    onClick = onDismiss
+                )
+            } else {
+                discoveredRobots.forEach { robot ->
+                    DropdownMenuItem(
+                        text = { Text(robot.name, color = MaterialTheme.colorScheme.onSurface) },
+                        onClick = { onSelect(robot); onDismiss() }
+                    )
                 }
-                socket.close()
-            } catch (e: Exception) {
-                e.printStackTrace()
             }
         }
     }
@@ -479,7 +442,7 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
                                 .padding(16.dp)
                         ) {
                             Text(
-                                text = if (discoveredRobots.isNotEmpty()) "Select Robot" else "No robots found",
+                                text = "Select Robot",
                                 color = MaterialTheme.colorScheme.onPrimary
                             )
                             Icon(
@@ -490,28 +453,13 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
                             )
                         }
 
-                        DropdownMenu(
-                            expanded = mExpanded,
-                            onDismissRequest = { mExpanded = false },
-                            modifier = Modifier.width(200.dp)
-                        ) {
-                            discoveredRobots.forEachIndexed { index, robot ->
-                                DropdownMenuItem(
-                                    onClick = {
-                                        linkIndex = index
-                                        mExpanded = false
-                                    },
-                                    text = { Text(robot.name, color = MaterialTheme.colorScheme.onPrimary) }
-                                )
+                        RobotDropdown(
+                            mExpanded = mExpanded,
+                            onDismiss = { mExpanded = false },
+                            onSelect = { robot ->
+//                                TODO: go to addConnectConfig with received params
                             }
-
-                            if (discoveredRobots.isEmpty()) {
-                                DropdownMenuItem(
-                                    onClick = { mExpanded = false },
-                                    text = { Text("No robots found", color = MaterialTheme.colorScheme.onPrimary) }
-                                )
-                            }
-                        }
+                        )
                     }
                 }
             }
