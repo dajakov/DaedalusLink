@@ -112,12 +112,6 @@ void setup() {
 }
 
 void loop() {
-  gui.sendDebug(random(25, 40), random(70, 100), random(100, 200));
-  delay(2000);
-}
 
-
-    webSocket.sendTXT(clientNum, (char*)payload); // Echo back
-  }
 }
 ```
