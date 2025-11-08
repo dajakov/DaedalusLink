@@ -80,6 +80,8 @@ class MainActivity : ComponentActivity() {
     private val linkConfigViewModel: LinkConfigViewModel by viewModels()
     private val debugViewModel: DebugViewModel by viewModels()
 
+    private val discoveryViewModel: DiscoveryViewModel by viewModels()
+
     private lateinit var analyticsLogger: AnalyticsLogger
     private lateinit var webSocketManager: WebSocketManager
 
@@ -115,7 +117,7 @@ class MainActivity : ComponentActivity() {
 
                 SideEffect {
                     val window = this.window
-                    window.statusBarColor = AndroidColor.TRANSPARENT
+                    window.statusBarColor = AndroidColor.TRANSPARENT  // deprecated, but fixes contrast issue on api versions <35
                     WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !isPrimaryColorDark
                 }
 
@@ -124,7 +126,7 @@ class MainActivity : ComponentActivity() {
                 val currentDestination by navController.currentBackStackEntryAsState()
                 val showBottomBar = currentDestination?.destination?.route?.let { route ->
                     !route.startsWith("loading") && route != "landing"
-                            && route != "addConnectConfig" && route != "appSettings"
+                            && !route.startsWith("addConnectConfig") && route != "appSettings"
                 } ?: true
 
                 Column(modifier = Modifier.fillMaxSize()) {
@@ -177,23 +179,26 @@ class MainActivity : ComponentActivity() {
                                 end = paddingValues.calculateRightPadding(LocalLayoutDirection.current)
                             ))) {
                             composable("landing") { LandingScreen(navController,
-                                connectConfigViewModel, linkConfigViewModel) }
+                                connectConfigViewModel, linkConfigViewModel, discoveryViewModel) }
                             composable("loading/{configIndex}/{linkIndex}") { backStackEntry ->
                                 val configIndex = backStackEntry.arguments?.getString("configIndex")
                                     ?.toIntOrNull() ?: 0
                                 val linkIndex = backStackEntry.arguments?.getString("linkIndex")
                                     ?.toIntOrNull() ?: 0
 
-                                // Pass the MainActivity's webSocketManager instance to LoadingScreen
                                 LoadingScreen(navController, connectConfigViewModel, configIndex,
                                     linkConfigViewModel, linkIndex, debugViewModel, webSocketManager)
                             }
                             composable("appSettings") { AppSettingsScreen(navController) }
-                            composable("control") { ControlScreen(navController, webSocketManager) } // Pass webSocketManager
+                            composable("control") { ControlScreen(navController, webSocketManager) }
                             composable("debug") { DebugScreen(navController, debugViewModel) }
                             composable("settings") { SettingsScreen(navController) }
-                            composable("addConnectConfig") { AddConnectConfigScreen(navController,
-                                connectConfigViewModel) }
+                            composable("addConnectConfig/{discoveryIndex}") { backStackEntry ->
+                                val discoveryIndex = backStackEntry.arguments?.getString("discoveryIndex")
+                                    ?.toIntOrNull() ?: 0
+
+                                AddConnectConfigScreen(navController, connectConfigViewModel, discoveryIndex, discoveryViewModel)
+                            }
                         }
                     }
                 }
@@ -290,9 +295,10 @@ fun CustomIcon(resourceId: Int, selectedIndex: MutableState<Int>, index: Int) {
     )
 }
 
+@SuppressLint("ConfigurationScreenWidthHeight")
 @Composable
 fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectConfigViewModel,
-                  linkConfigViewModel: LinkConfigViewModel) {
+                  linkConfigViewModel: LinkConfigViewModel, discoveryViewModel: DiscoveryViewModel) {
     sharedState.clear()
 
     val screenWidth = LocalConfiguration.current.screenWidthDp.dp
@@ -319,12 +325,11 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
 
     @Composable
     fun RobotDropdown(
-        viewModel: DiscoveryViewModel = viewModel(),
         mExpanded: Boolean,
         onDismiss: () -> Unit,
-        onSelect: (RobotDiscovery) -> Unit
+        onSelect: (index: Int) -> Unit
     ) {
-        val discoveredRobots by viewModel.robots.collectAsState()
+        val discoveredRobots by discoveryViewModel.robots.collectAsState()
 
         DropdownMenu(
             expanded = mExpanded,
@@ -340,10 +345,10 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
                     onClick = onDismiss
                 )
             } else {
-                discoveredRobots.forEach { robot ->
+                discoveredRobots.forEachIndexed { index, robot ->
                     DropdownMenuItem(
                         text = { Text(robot.name, color = MaterialTheme.colorScheme.onSurface) },
-                        onClick = { onSelect(robot); onDismiss() }
+                        onClick = { onSelect(index); onDismiss() }
                     )
                 }
             }
@@ -417,7 +422,7 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
                 Column(modifier = Modifier.padding(15.dp)) {
                     Box(modifier = Modifier.fillMaxWidth()) {
                         Button(
-                            onClick = { navController.navigate("addConnectConfig") },
+                            onClick = { navController.navigate("addConnectConfig/-1") },
                             modifier = Modifier
                                 .padding(15.dp)
                                 .align(Alignment.Center)
@@ -456,8 +461,8 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
                         RobotDropdown(
                             mExpanded = mExpanded,
                             onDismiss = { mExpanded = false },
-                            onSelect = { robot ->
-//                                TODO: go to addConnectConfig with received params
+                            onSelect = { index ->
+                                navController.navigate("addConnectConfig/${index}")
                             }
                         )
                     }
@@ -700,7 +705,7 @@ fun AppSettingsScreen(navController: NavController) {
                             try {
                                 uriHandler.openUri("https://dajakov.com/projects/daedalusLink/privacy") // Placeholder URL
                             } catch (e: Exception) {
-                                // Handle error, e.g., show a toast
+                                // Handle error
                             }
                         },
                     color = MaterialTheme.colorScheme.tertiary,
@@ -940,6 +945,7 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
 
             if (jsonReceived == true) {
                 val json = sharedState.receivedJsonData
+                @Suppress("SENSELESS_COMPARISON") // I'm sure this is not senseless!
                 if (json != null) {
                     val (valid, errorMsg) = validateConfig(json)
 
@@ -959,7 +965,6 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
                 showExitButton = true
             }
         }
-
 
         delay(1000) // Shorter delay to see final status before navigating or showing exit
 
@@ -1023,17 +1028,26 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
         }
     }
 }
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AddConnectConfigScreen(navController: NavController, viewModel: ConnectConfigViewModel) {
+fun AddConnectConfigScreen(navController: NavController, connectConfigViewModel: ConnectConfigViewModel,
+                           discoveryIndex: Int, discoveryViewModel: DiscoveryViewModel) {
+    val discoveredRobots by discoveryViewModel.robots.collectAsState()
+
     var configName by remember { mutableStateOf("") }
-    var selectedOption by remember { mutableStateOf("WiFi") }
     var address by remember { mutableStateOf("") }
     var heartbeat by remember { mutableStateOf("") }
+
+    if (discoveryIndex != -1){
+        configName = discoveredRobots.getOrNull(discoveryIndex)?.name ?: "ERROR: no valid name"
+        address = discoveredRobots.getOrNull(discoveryIndex)?.let { "${it.ip}:${it.wsPort}" } ?: "ERROR: no valid ip and/or port"
+        heartbeat = "10"
+    }
+
+    var selectedOption by remember { mutableStateOf("WiFi") }
     var selectedIcon by remember { mutableStateOf<IconItem>(IconItem
         .MaterialIcon(Icons.Default.Info)) } // Default icon
-    val configs by viewModel.allConfigs.collectAsState(initial = emptyList())
+    val configs by connectConfigViewModel.allConfigs.collectAsState(initial = emptyList())
 
     Scaffold(containerColor = MaterialTheme.colorScheme.primary,
         topBar = {
@@ -1168,7 +1182,7 @@ fun AddConnectConfigScreen(navController: NavController, viewModel: ConnectConfi
                             heartbeatFrequency = heartbeat.toIntOrNull() ?: 0,
                             iconId = iconId
                         )
-                        viewModel.insertConfig(config)
+                        connectConfigViewModel.insertConfig(config)
                         navController.navigate("landing")
                     },
                     modifier = Modifier
@@ -1231,7 +1245,7 @@ fun AddConnectConfigScreen(navController: NavController, viewModel: ConnectConfi
                             }
                             Spacer(modifier = Modifier.width(8.dp))
                             Button(
-                                onClick = { viewModel.deleteConfig(config) },
+                                onClick = { connectConfigViewModel.deleteConfig(config) },
                                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
                                 contentPadding = PaddingValues(
                                     horizontal = 8.dp,
