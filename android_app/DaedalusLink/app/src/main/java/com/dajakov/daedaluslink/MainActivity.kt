@@ -335,7 +335,7 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
             expanded = mExpanded,
             onDismissRequest = onDismiss,
             modifier = Modifier
-                .width(screenWidth - 60.dp)
+                .width(screenWidth - 30.dp)
                 .background(MaterialTheme.colorScheme.onSurfaceVariant)
                 .border(1.dp, MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
         ) {
@@ -419,7 +419,7 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
 
         when (selectedIndex.intValue) {
             0 -> {
-                Column(modifier = Modifier.padding(15.dp)) {
+                Column {
                     Box(modifier = Modifier.fillMaxWidth()) {
                         Button(
                             onClick = { navController.navigate("addConnectConfig/-1") },
@@ -1028,6 +1028,7 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
         }
     }
 }
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddConnectConfigScreen(navController: NavController, connectConfigViewModel: ConnectConfigViewModel,
