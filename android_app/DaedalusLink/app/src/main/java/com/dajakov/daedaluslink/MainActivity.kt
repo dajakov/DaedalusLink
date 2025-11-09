@@ -70,6 +70,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
+import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.serialization.json.Json
 
 val sharedState = SharedState() // Global shared state
@@ -78,6 +79,8 @@ class MainActivity : ComponentActivity() {
     private val connectConfigViewModel: ConnectConfigViewModel by viewModels()
     private val linkConfigViewModel: LinkConfigViewModel by viewModels()
     private val debugViewModel: DebugViewModel by viewModels()
+
+    private val discoveryViewModel: DiscoveryViewModel by viewModels()
 
     private lateinit var analyticsLogger: AnalyticsLogger
     private lateinit var webSocketManager: WebSocketManager
@@ -114,7 +117,7 @@ class MainActivity : ComponentActivity() {
 
                 SideEffect {
                     val window = this.window
-                    window.statusBarColor = AndroidColor.TRANSPARENT
+                    window.statusBarColor = AndroidColor.TRANSPARENT  // deprecated, but fixes contrast issue on api versions <35
                     WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !isPrimaryColorDark
                 }
 
@@ -123,7 +126,7 @@ class MainActivity : ComponentActivity() {
                 val currentDestination by navController.currentBackStackEntryAsState()
                 val showBottomBar = currentDestination?.destination?.route?.let { route ->
                     !route.startsWith("loading") && route != "landing"
-                            && route != "addConnectConfig" && route != "appSettings"
+                            && !route.startsWith("addConnectConfig") && route != "appSettings"
                 } ?: true
 
                 Column(modifier = Modifier.fillMaxSize()) {
@@ -176,23 +179,26 @@ class MainActivity : ComponentActivity() {
                                 end = paddingValues.calculateRightPadding(LocalLayoutDirection.current)
                             ))) {
                             composable("landing") { LandingScreen(navController,
-                                connectConfigViewModel, linkConfigViewModel) }
+                                connectConfigViewModel, linkConfigViewModel, discoveryViewModel) }
                             composable("loading/{configIndex}/{linkIndex}") { backStackEntry ->
                                 val configIndex = backStackEntry.arguments?.getString("configIndex")
                                     ?.toIntOrNull() ?: 0
                                 val linkIndex = backStackEntry.arguments?.getString("linkIndex")
                                     ?.toIntOrNull() ?: 0
 
-                                // Pass the MainActivity's webSocketManager instance to LoadingScreen
                                 LoadingScreen(navController, connectConfigViewModel, configIndex,
                                     linkConfigViewModel, linkIndex, debugViewModel, webSocketManager)
                             }
                             composable("appSettings") { AppSettingsScreen(navController) }
-                            composable("control") { ControlScreen(navController, webSocketManager) } // Pass webSocketManager
+                            composable("control") { ControlScreen(navController, webSocketManager) }
                             composable("debug") { DebugScreen(navController, debugViewModel) }
                             composable("settings") { SettingsScreen(navController) }
-                            composable("addConnectConfig") { AddConnectConfigScreen(navController,
-                                connectConfigViewModel) }
+                            composable("addConnectConfig/{discoveryIndex}") { backStackEntry ->
+                                val discoveryIndex = backStackEntry.arguments?.getString("discoveryIndex")
+                                    ?.toIntOrNull() ?: 0
+
+                                AddConnectConfigScreen(navController, connectConfigViewModel, discoveryIndex, discoveryViewModel)
+                            }
                         }
                     }
                 }
@@ -289,9 +295,10 @@ fun CustomIcon(resourceId: Int, selectedIndex: MutableState<Int>, index: Int) {
     )
 }
 
+@SuppressLint("ConfigurationScreenWidthHeight")
 @Composable
 fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectConfigViewModel,
-                  linkConfigViewModel: LinkConfigViewModel) {
+                  linkConfigViewModel: LinkConfigViewModel, discoveryViewModel: DiscoveryViewModel) {
     sharedState.clear()
 
     val screenWidth = LocalConfiguration.current.screenWidthDp.dp
@@ -315,6 +322,38 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
             connectConfigs.map { it.name } +
             listOf("Settings")
     val configIDs = connectConfigs.map { it.id}
+
+    @Composable
+    fun RobotDropdown(
+        mExpanded: Boolean,
+        onDismiss: () -> Unit,
+        onSelect: (index: Int) -> Unit
+    ) {
+        val discoveredRobots by discoveryViewModel.robots.collectAsState()
+
+        DropdownMenu(
+            expanded = mExpanded,
+            onDismissRequest = onDismiss,
+            modifier = Modifier
+                .width(screenWidth - 30.dp)
+                .background(MaterialTheme.colorScheme.onSurfaceVariant)
+                .border(1.dp, MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
+        ) {
+            if (discoveredRobots.isEmpty()) {
+                DropdownMenuItem(
+                    text = { Text("No robots found", color = MaterialTheme.colorScheme.onSurface) },
+                    onClick = onDismiss
+                )
+            } else {
+                discoveredRobots.forEachIndexed { index, robot ->
+                    DropdownMenuItem(
+                        text = { Text(robot.name, color = MaterialTheme.colorScheme.onSurface) },
+                        onClick = { onSelect(index); onDismiss() }
+                    )
+                }
+            }
+        }
+    }
 
     LaunchedEffect(selectedIndex.intValue) {
         val targetOffset = with(density) {
@@ -378,30 +417,68 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
             }
         }
 
-        if (selectedIndex.intValue == 0 || selectedIndex.intValue == iconsList.size - 1) {
-            Box(modifier = Modifier.fillMaxWidth()) {
-                Button(
-                    onClick = {
-                        if (selectedIndex.intValue == 0) {
-                            navController.navigate("addConnectConfig")
-                        } else { // This implies selectedIndex.intValue == iconsList.size - 1
-                            navController.navigate("appSettings")
+        when (selectedIndex.intValue) {
+            0 -> {
+                Column {
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        Button(
+                            onClick = { navController.navigate("addConnectConfig/-1") },
+                            modifier = Modifier
+                                .padding(15.dp)
+                                .align(Alignment.Center)
+                                .fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.secondary),
+                            shape = RectangleShape
+                        ) {
+                            Text(
+                                "Add a new Robot",
+                                color = MaterialTheme.colorScheme.onSecondary,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
                         }
-                    },
-                    modifier = Modifier
-                        .padding(15.dp)
-                        .align(Alignment.Center)
-                        .fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.secondary),
-                    shape = RectangleShape
-                ) {
-                    if (selectedIndex.intValue == 0){
-                        Text(
-                            "Add a new Robot",
-                            color = MaterialTheme.colorScheme.onSecondary,
-                            style = MaterialTheme.typography.bodyMedium
+                    }
+                    var mExpanded by remember { mutableStateOf(false) }
+                    Column(modifier = Modifier.padding(15.dp)) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .border(1.dp, MaterialTheme.colorScheme.onPrimary, RoundedCornerShape(8.dp))
+                                .clickable { mExpanded = true }
+                                .padding(16.dp)
+                        ) {
+                            Text(
+                                text = "Select Robot",
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                            Icon(
+                                imageVector = if (mExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                                contentDescription = "Dropdown icon",
+                                modifier = Modifier.align(Alignment.CenterEnd),
+                                tint = MaterialTheme.colorScheme.onPrimary
+                            )
+                        }
+
+                        RobotDropdown(
+                            mExpanded = mExpanded,
+                            onDismiss = { mExpanded = false },
+                            onSelect = { index ->
+                                navController.navigate("addConnectConfig/${index}")
+                            }
                         )
-                    } else {
+                    }
+                }
+            }
+            iconsList.size - 1 -> {
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    Button(
+                        onClick = { navController.navigate("appSettings") },
+                        modifier = Modifier
+                            .padding(15.dp)
+                            .align(Alignment.Center)
+                            .fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.secondary),
+                        shape = RectangleShape
+                    ) {
                         Text(
                             "App settings",
                             color = MaterialTheme.colorScheme.onSecondary,
@@ -410,71 +487,48 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
                     }
                 }
             }
-        } else {
-            var mExpanded by remember { mutableStateOf(false) }
-            val linkConfigs by linkConfigViewModel.allConfigs.collectAsState(initial = emptyList())
-            val configNames = linkConfigs.map { it.name } + "Auto-Pull from Robot"
-            val iconDropdown = if (mExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown
+            else -> {
+                var mExpanded by remember { mutableStateOf(false) }
+                val linkConfigs by linkConfigViewModel.allConfigs.collectAsState(initial = emptyList())
+                val configNames = linkConfigs.map { it.name } + "Auto-Pull from Robot"
+                val iconDropdown = if (mExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown
 
-            Column(Modifier.padding(15.dp)) {
-                Text("Select Link Config", modifier = Modifier.padding(bottom = 5.dp), color = MaterialTheme.colorScheme.onPrimary)
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(1.dp, MaterialTheme.colorScheme.onPrimary, RoundedCornerShape(8.dp))
-                        .clickable { mExpanded = !mExpanded }
-                        .padding(16.dp)
-                ) {
-                    Text(
-                        text = configNames.getOrNull(linkIndex) ?: "[Auto-Pull from Robot]",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onPrimary
-                    )
-                    Icon(
-                        imageVector = iconDropdown,
-                        contentDescription = "Dropdown icon",
-                        modifier = Modifier.align(Alignment.CenterEnd).padding(5.dp),
-                        tint = MaterialTheme.colorScheme.onPrimary
-                    )
-                }
-                DropdownMenu(
-                    expanded = mExpanded,
-                    onDismissRequest = { mExpanded = false },
-                    modifier = Modifier.width(200.dp).padding(top = 8.dp)
-                ) {
-                    configNames.forEachIndexed { index, name ->
-                        DropdownMenuItem(
-                            onClick = {
-                                linkIndex = if (index == configNames.lastIndex) -1 else index
-                                mExpanded = false
-                            },
-                            text = { Text(text = name, color = MaterialTheme.colorScheme.onPrimary) }
+                Column(Modifier.padding(15.dp)) {
+                    Text("Select Link Config", modifier = Modifier.padding(bottom = 5.dp), color = MaterialTheme.colorScheme.onPrimary)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, MaterialTheme.colorScheme.onPrimary, RoundedCornerShape(8.dp))
+                            .clickable { mExpanded = !mExpanded }
+                            .padding(16.dp)
+                    ) {
+                        Text(
+                            text = configNames.getOrNull(linkIndex) ?: "[Auto-Pull from Robot]",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                        Icon(
+                            imageVector = iconDropdown,
+                            contentDescription = "Dropdown icon",
+                            modifier = Modifier.align(Alignment.CenterEnd).padding(5.dp),
+                            tint = MaterialTheme.colorScheme.onPrimary
                         )
                     }
-                }
-            }
-            Box(modifier = Modifier.fillMaxWidth()) {
-                Button(
-                    onClick = {                         val actualConfigId = configIDs.getOrNull(selectedIndex.intValue - 1)
-                        if (actualConfigId != null) {
-                           navController.navigate("loading/$actualConfigId/$linkIndex")
-                        } else {
-                            // Handle error: No valid config selected, or placeholder was clicked
-                            println("Error: No valid robot configuration selected for connection.")
+                    DropdownMenu(
+                        expanded = mExpanded,
+                        onDismissRequest = { mExpanded = false },
+                        modifier = Modifier.width(200.dp).padding(top = 8.dp)
+                    ) {
+                        configNames.forEachIndexed { index, name ->
+                            DropdownMenuItem(
+                                onClick = {
+                                    linkIndex = if (index == configNames.lastIndex) -1 else index
+                                    mExpanded = false
+                                },
+                                text = { Text(text = name, color = MaterialTheme.colorScheme.onPrimary) }
+                            )
                         }
-                    },
-                    modifier = Modifier
-                        .padding(0.dp)
-                        .align(Alignment.Center)
-                        .fillMaxWidth(0.9f),
-                    colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.secondary),
-                    shape = RectangleShape
-                ) {
-                    Text(
-                        "Connect to Robot",
-                        color = MaterialTheme.colorScheme.onSecondary,
-                        style = MaterialTheme.typography.bodyMedium
-                    )
+                    }
                 }
             }
         }
@@ -651,7 +705,7 @@ fun AppSettingsScreen(navController: NavController) {
                             try {
                                 uriHandler.openUri("https://dajakov.com/projects/daedalusLink/privacy") // Placeholder URL
                             } catch (e: Exception) {
-                                // Handle error, e.g., show a toast
+                                // Handle error
                             }
                         },
                     color = MaterialTheme.colorScheme.tertiary,
@@ -891,6 +945,7 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
 
             if (jsonReceived == true) {
                 val json = sharedState.receivedJsonData
+                @Suppress("SENSELESS_COMPARISON") // I'm sure this is not senseless!
                 if (json != null) {
                     val (valid, errorMsg) = validateConfig(json)
 
@@ -910,7 +965,6 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
                 showExitButton = true
             }
         }
-
 
         delay(1000) // Shorter delay to see final status before navigating or showing exit
 
@@ -977,14 +1031,24 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AddConnectConfigScreen(navController: NavController, viewModel: ConnectConfigViewModel) {
+fun AddConnectConfigScreen(navController: NavController, connectConfigViewModel: ConnectConfigViewModel,
+                           discoveryIndex: Int, discoveryViewModel: DiscoveryViewModel) {
+    val discoveredRobots by discoveryViewModel.robots.collectAsState()
+
     var configName by remember { mutableStateOf("") }
-    var selectedOption by remember { mutableStateOf("WiFi") }
     var address by remember { mutableStateOf("") }
     var heartbeat by remember { mutableStateOf("") }
+
+    if (discoveryIndex != -1){
+        configName = discoveredRobots.getOrNull(discoveryIndex)?.name ?: "ERROR: no valid name"
+        address = discoveredRobots.getOrNull(discoveryIndex)?.let { "${it.ip}:${it.wsPort}" } ?: "ERROR: no valid ip and/or port"
+        heartbeat = "10"
+    }
+
+    var selectedOption by remember { mutableStateOf("WiFi") }
     var selectedIcon by remember { mutableStateOf<IconItem>(IconItem
         .MaterialIcon(Icons.Default.Info)) } // Default icon
-    val configs by viewModel.allConfigs.collectAsState(initial = emptyList())
+    val configs by connectConfigViewModel.allConfigs.collectAsState(initial = emptyList())
 
     Scaffold(containerColor = MaterialTheme.colorScheme.primary,
         topBar = {
@@ -1119,7 +1183,7 @@ fun AddConnectConfigScreen(navController: NavController, viewModel: ConnectConfi
                             heartbeatFrequency = heartbeat.toIntOrNull() ?: 0,
                             iconId = iconId
                         )
-                        viewModel.insertConfig(config)
+                        connectConfigViewModel.insertConfig(config)
                         navController.navigate("landing")
                     },
                     modifier = Modifier
@@ -1182,7 +1246,7 @@ fun AddConnectConfigScreen(navController: NavController, viewModel: ConnectConfi
                             }
                             Spacer(modifier = Modifier.width(8.dp))
                             Button(
-                                onClick = { viewModel.deleteConfig(config) },
+                                onClick = { connectConfigViewModel.deleteConfig(config) },
                                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
                                 contentPadding = PaddingValues(
                                     horizontal = 8.dp,
