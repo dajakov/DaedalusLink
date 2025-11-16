@@ -275,6 +275,12 @@ class WebSocketManager(private val analyticsLogger: AnalyticsLogger?) { // Added
                     val payload = json.opt("payload")
 
                     when (type) {
+                        "auth_required" -> {
+                            if (payload != null) {
+                                ss.receivedChallenge = payload.toString()
+                            }
+                            ss.isAuthRequired = true
+                        }
                         "config" -> {
                             if (payload != null) {
                                 ss.receivedJsonData = payload.toString()
@@ -314,6 +320,10 @@ class SharedState {
     var isJsonReceived by mutableStateOf(false)
     var robotName by mutableStateOf("")
     var packetLossPercentage by mutableStateOf(0f)
+
+    var receivedChallenge by mutableStateOf("")
+
+    var isAuthRequired by mutableStateOf(false)
 
     fun clear() {
         isConnected = false
