@@ -69,7 +69,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.serialization.json.Json
 
@@ -902,6 +904,80 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
         }
     }
 
+    @Composable
+    fun AuthLoginDialog(
+        visible: Boolean,
+        onLogin: (String, String) -> Unit,
+        onCancel: () -> Unit
+    ) {
+        if (!visible) return
+
+        Dialog(onDismissRequest = { /* disable dismiss by outside click */ }) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(Color(0x88000000)) // semi-transparent overlay
+                    .padding(24.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    elevation = CardDefaults.cardElevation(12.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+
+                        Text(
+                            "Authentication Required",
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+
+                        var username by remember { mutableStateOf("") }
+                        var password by remember { mutableStateOf("") }
+
+                        OutlinedTextField(
+                            value = username,
+                            onValueChange = { username = it },
+                            label = { Text("Username") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        OutlinedTextField(
+                            value = password,
+                            onValueChange = { password = it },
+                            label = { Text("Password") },
+                            singleLine = true,
+                            visualTransformation = PasswordVisualTransformation(),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            TextButton(onClick = onCancel) {
+                                Text("Cancel")
+                            }
+                            Spacer(Modifier.width(8.dp))
+                            Button(
+                                onClick = { onLogin(username, password) },
+                                enabled = username.isNotBlank() && password.isNotBlank()
+                            ) {
+                                Text("Login")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     LaunchedEffect(Unit) {
         updateSteps("Pinging $ipAddress...")
         debugText = "Connecting to $robotName... "
@@ -929,21 +1005,30 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
                 showExitButton = true
             } else {
                 updateSteps("✅", true)
-                connectionSuccess = true
             }
         }
 
         if (webSocketResult) {
             updateSteps("Waiting for JSON file... ")
 
-            val jsonReceived = withTimeoutOrNull(5000) {
-                while (!sharedState.isJsonReceived) {
-                    delay(500)
+            val firstEvent = withTimeoutOrNull(7000) {
+                while (
+                    !sharedState.isAuthRequired &&
+                    !sharedState.isJsonReceived
+                ) {
+                    delay(200)
                 }
                 true
             }
 
-            if (jsonReceived == true) {
+            if (firstEvent == null) {
+                updateSteps("❌ Timed out", true)
+                connectionSuccess = false
+                showExitButton = true
+                return@LaunchedEffect
+            }
+
+            if (sharedState.isJsonReceived) {
                 val json = sharedState.receivedJsonData
                 @Suppress("SENSELESS_COMPARISON") // I'm sure this is not senseless!
                 if (json != null) {
@@ -959,6 +1044,27 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
                         showExitButton = true
                     }
                 }
+            } else if (sharedState.isAuthRequired){
+                navController.navigate("login")
+
+                // Wait for authentication to finish
+                val authOK = withTimeoutOrNull(15000) {
+                    while (!sharedState.authCompleted && !sharedState.authFailed) {
+                        delay(200)
+                    }
+                    sharedState.authCompleted
+                }
+
+                if (authOK != true) {
+                    updateSteps("❌ Authentication failed", true)
+                    connectionSuccess = false
+                    showExitButton = true
+                    return@LaunchedEffect
+                }
+
+                updateSteps("Authentication Success", true)
+                sharedState.isAuthRequired = false
+                sharedState.authCompleted = false
             } else {
                 updateSteps("❌ No JSON Response", true)
                 connectionSuccess = false

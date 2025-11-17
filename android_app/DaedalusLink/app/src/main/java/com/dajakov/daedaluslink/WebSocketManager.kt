@@ -322,8 +322,9 @@ class SharedState {
     var packetLossPercentage by mutableStateOf(0f)
 
     var receivedChallenge by mutableStateOf("")
-
     var isAuthRequired by mutableStateOf(false)
+    var authCompleted by mutableStateOf(false)
+    var authFailed by mutableStateOf(false)
 
     fun clear() {
         isConnected = false
