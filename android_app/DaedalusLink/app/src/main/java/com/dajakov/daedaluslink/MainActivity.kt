@@ -74,6 +74,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.serialization.json.Json
+import javax.crypto.Mac
+import javax.crypto.spec.SecretKeySpec
 
 val sharedState = SharedState() // Global shared state
 
@@ -835,6 +837,8 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
     var configError by remember { mutableStateOf<String?>(null) }
     var showConfigError by remember { mutableStateOf(false) }
 
+    var showLoginDialog by remember { mutableStateOf(false) }
+
     fun updateSteps(step: String, isSameLine: Boolean = false) {
         steps = if (isSameLine && steps.isNotEmpty()) {
             val lastStep = steps.last() + " | " + step
@@ -1045,7 +1049,7 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
                     }
                 }
             } else if (sharedState.isAuthRequired){
-                navController.navigate("login")
+                showLoginDialog = true
 
                 // Wait for authentication to finish
                 val authOK = withTimeoutOrNull(15000) {
@@ -1130,6 +1134,31 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
+            }
+
+            fun computeHmacSha256(password: String, challenge: String): String {
+                val hmacKey = SecretKeySpec(password.toByteArray(Charsets.UTF_8), "HmacSHA256")
+                val mac = Mac.getInstance("HmacSHA256").apply {
+                    init(hmacKey)
+                }
+                val hash = mac.doFinal(challenge.toByteArray(Charsets.UTF_8))
+
+                return hash.joinToString("") { "%02x".format(it) }
+            }
+
+            if (showLoginDialog) {
+                AuthLoginDialog(
+                    visible = sharedState.isAuthRequired,
+                    onLogin = { username, password ->
+                        // Compute HMAC(password, challenge) and send to server
+                        val response = computeHmacSha256(password, sharedState.receivedChallenge)
+//                        webSocketMngr.sendAuth(username, response)
+                    },
+                    onCancel = {
+                        // User chose to abort login
+                        sharedState.authFailed = true
+                    }
+                )
             }
         }
     }

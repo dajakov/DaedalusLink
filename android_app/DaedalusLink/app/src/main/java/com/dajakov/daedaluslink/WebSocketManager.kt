@@ -272,12 +272,13 @@ class WebSocketManager(private val analyticsLogger: AnalyticsLogger?) { // Added
                 try {
                     val json = JSONObject(message)
                     val type = json.getString("type")
+                    val challenge = json.optString("challenge")
                     val payload = json.opt("payload")
 
                     when (type) {
                         "auth_required" -> {
-                            if (payload != null) {
-                                ss.receivedChallenge = payload.toString()
+                            if (challenge != null) {
+                                ss.receivedChallenge = challenge
                             }
                             ss.isAuthRequired = true
                         }
