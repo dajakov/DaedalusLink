@@ -920,14 +920,13 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
             Box(
                 Modifier
                     .fillMaxSize()
-                    .background(Color(0x88000000)) // semi-transparent overlay
                     .padding(24.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.background),
                     elevation = CardDefaults.cardElevation(12.dp)
                 ) {
                     Column(
@@ -938,7 +937,8 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
                         Text(
                             "Authentication Required",
                             fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onBackground
                         )
 
                         var username by remember { mutableStateOf("") }
@@ -947,33 +947,60 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
                         OutlinedTextField(
                             value = username,
                             onValueChange = { username = it },
-                            label = { Text("Username") },
+                            label = { Text("Username", color = MaterialTheme.colorScheme.onPrimary) },
+                            modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
+                            colors = TextFieldDefaults.colors(
+                                focusedIndicatorColor = MaterialTheme.colorScheme.surfaceVariant,
+                                unfocusedIndicatorColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                focusedContainerColor = MaterialTheme.colorScheme.primary,
+                                unfocusedContainerColor = MaterialTheme.colorScheme.primary,
+                                cursorColor = MaterialTheme.colorScheme.onPrimary
+                            )
                         )
 
                         OutlinedTextField(
                             value = password,
                             onValueChange = { password = it },
-                            label = { Text("Password") },
+                            label = { Text("Password", color = MaterialTheme.colorScheme.onPrimary) },
+                            modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
                             visualTransformation = PasswordVisualTransformation(),
-                            modifier = Modifier.fillMaxWidth()
+                            colors = TextFieldDefaults.colors(
+                                focusedIndicatorColor = MaterialTheme.colorScheme.surfaceVariant,
+                                unfocusedIndicatorColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                focusedContainerColor = MaterialTheme.colorScheme.primary,
+                                unfocusedContainerColor = MaterialTheme.colorScheme.primary,
+                                cursorColor = MaterialTheme.colorScheme.onPrimary
+                            )
                         )
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.End
                         ) {
-                            TextButton(onClick = onCancel) {
-                                Text("Cancel")
+                            TextButton(onClick = onCancel,
+                                colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.onSecondary),
+                                shape = RectangleShape
+                            ) {
+                                Text(
+                                    "Cancel",
+                                    color = MaterialTheme.colorScheme.secondary,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
                             }
                             Spacer(Modifier.width(8.dp))
                             Button(
                                 onClick = { onLogin(username, password) },
-                                enabled = username.isNotBlank() && password.isNotBlank()
+                                enabled = username.isNotBlank() && password.isNotBlank(),
+                                colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.secondary),
+                                shape = RectangleShape
                             ) {
-                                Text("Login")
+                                Text(
+                                    "Login",
+                                    color = MaterialTheme.colorScheme.onSecondary,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
                             }
                         }
                     }
@@ -983,6 +1010,7 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
     }
 
     LaunchedEffect(Unit) {
+        sharedState.authFailed = false
         updateSteps("Pinging $ipAddress...")
         debugText = "Connecting to $robotName... "
         val pingResult = performPing(ipAddress)
@@ -1155,8 +1183,7 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
 //                        webSocketMngr.sendAuth(username, response)
                     },
                     onCancel = {
-                        // User chose to abort login
-                        sharedState.authFailed = true
+                        navController.navigate("landing")
                     }
                 )
             }
