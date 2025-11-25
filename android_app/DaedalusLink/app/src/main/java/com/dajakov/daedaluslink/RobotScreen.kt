@@ -366,7 +366,7 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
                         )
                         "joystick" -> JoystickElement(
                             element, gridSize, offset,
-                            onMove = {cmd, x, y -> webSocketInterface.sendMovementCommand(cmd, x, y) }
+                            onMove = {cmd, x, y -> webSocketInterface.sendJoystickCommand(cmd, x, y) }
                         )
                         "slider" -> SliderElement(
                             element, gridSize, offset,

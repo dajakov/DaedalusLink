@@ -6,6 +6,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.*
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import okhttp3.*
 import org.json.JSONException
 import org.json.JSONObject
@@ -226,25 +230,37 @@ class WebSocketManager(private val analyticsLogger: AnalyticsLogger?) { // Added
         connectionStartTime = 0L
     }
 
-    fun sendMovementCommand(command: String, x: Byte, y: Byte) {
-        sendCommand("$command $x,$y")
+    fun sendJoystickCommand(command: String, x: Byte, y: Byte) {
+        sendCommand(command, listOf(x, y))
     }
 
     fun sendSliderCommand(command: String, value: Byte) {
-        sendCommand("$command $value")
+        sendCommand(command, value)
     }
 
-    fun sendCommand(command: String) {
-        if (currentSharedState?.isConnected == false && command != lastCommand) {
-            return
-        }
-        webSocket?.send(command)?.let {
-            updateLastCommand(command)
-            val currentSentCount = sentPacketsInWindow.incrementAndGet()
-            if (currentSentCount >= PACKET_LOSS_WINDOW_SIZE) {
-                evaluatePacketLoss()
+    fun sendCommand(cmd: String, data: Any? = null) {
+        if (currentSharedState?.isConnected == false && cmd != lastCommand) return
+
+        val json = buildJsonObject {
+            put("command", cmd)
+            when (data) {
+                null -> {}  // boolean press/release auto-handled by server
+                is Int -> put("data", data)
+                is String -> put("data", data)
+                is List<*> -> {
+                    val arr = buildJsonArray {
+                        data.forEach { add(JsonPrimitive(it.toString())) }
+                    }
+                    put("data", arr)
+                }
             }
-        } ?: println("Failed to send command: WebSocket is not initialized or send failed. Command: $command")
+        }.toString()
+
+        webSocket?.send(json)?.let {
+            updateLastCommand(cmd)
+            val count = sentPacketsInWindow.incrementAndGet()
+            if (count >= PACKET_LOSS_WINDOW_SIZE) evaluatePacketLoss()
+        } ?: println("Failed to send WS command: $cmd")
     }
 
     private fun updateLastCommand(command: String) {
