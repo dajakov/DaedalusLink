@@ -1207,7 +1207,7 @@ fun AddConnectConfigScreen(navController: NavController, connectConfigViewModel:
         heartbeat = "10"
     }
 
-    var selectedOption by remember { mutableStateOf("WiFi") }
+    var selectedOption by remember { mutableStateOf("WiFi") } // could be a constant, still here for legacy purposes as its part of db
     var selectedIcon by remember { mutableStateOf<IconItem>(IconItem
         .MaterialIcon(Icons.Default.Info)) } // Default icon
     val configs by connectConfigViewModel.allConfigs.collectAsState(initial = emptyList())
@@ -1274,31 +1274,6 @@ fun AddConnectConfigScreen(navController: NavController, connectConfigViewModel:
                 }
             }
             Spacer(modifier = Modifier.height(16.dp))
-
-            // Connection type selection (Radio buttons for WiFi and Bluetooth)
-            Text("Select Connection Type:", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                RadioButton(
-                    selected = selectedOption == "WiFi",
-                    onClick = { selectedOption = "WiFi" },
-                    colors = RadioButtonDefaults.colors(selectedColor = MaterialTheme.colorScheme.onPrimary,
-                        unselectedColor = MaterialTheme.colorScheme.onSurfaceVariant)
-                )
-                Text("WiFi", color = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.clickable
-                { selectedOption = "WiFi" })
-
-                Spacer(modifier = Modifier.width(16.dp))
-
-                RadioButton(
-                    selected = selectedOption == "Bluetooth",
-                    onClick = { selectedOption = "Bluetooth" },
-                    colors = RadioButtonDefaults.colors(selectedColor = MaterialTheme.colorScheme.onPrimary,
-                        unselectedColor = MaterialTheme.colorScheme.onSurfaceVariant)
-                )
-                Text("Bluetooth", color = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.clickable
-                { selectedOption = "Bluetooth" })
-            }
-            Spacer(modifier = Modifier.height(8.dp))
 
             // IP/MAC Address Input Field
             OutlinedTextField(
