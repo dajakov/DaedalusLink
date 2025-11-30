@@ -24,6 +24,9 @@ android {
         versionCode = 132
         versionName = "1.3.2"
 
+        buildConfigField("int", "CLIENT_PROTO_MAJOR", "1")
+        buildConfigField("int", "CLIENT_PROTO_MINOR", "0")
+
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -67,6 +70,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 

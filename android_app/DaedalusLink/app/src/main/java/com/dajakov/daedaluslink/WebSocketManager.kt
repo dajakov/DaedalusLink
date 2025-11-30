@@ -289,9 +289,15 @@ class WebSocketManager(private val analyticsLogger: AnalyticsLogger?) { // Added
                     val json = JSONObject(message)
                     val type = json.getString("type")
                     val challenge = json.optString("challenge")
+                    val protoMajor = json.optInt("proto_major")
+                    val protoMinor = json.optInt("proto_minor")
                     val payload = json.opt("payload")
 
                     when (type) {
+                        "checking_in_on_ya" -> {
+                            ss.serverProtoMajor = protoMajor
+                            ss.serverProtoMinor = protoMinor
+                        }
                         "auth_required" -> {
                             if (challenge != null) {
                                 ss.receivedChallenge = challenge
@@ -342,6 +348,9 @@ class SharedState {
     var isAuthRequired by mutableStateOf(false)
     var authCompleted by mutableStateOf(false)
     var authFailed by mutableStateOf(false)
+
+    var serverProtoMajor by mutableStateOf(0)
+    var serverProtoMinor by mutableStateOf(0)
 
     fun clear() {
         isConnected = false

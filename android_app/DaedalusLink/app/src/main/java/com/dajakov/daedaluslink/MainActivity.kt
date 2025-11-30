@@ -72,7 +72,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.window.Dialog
-import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.serialization.json.Json
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
@@ -1015,6 +1014,7 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
         debugText = "Connecting to $robotName... "
         val pingResult = performPing(ipAddress)
         var webSocketResult = false
+        var fatalProtocolIncompatibility = false
 
         if (pingResult) {
             updateSteps("✅", true)
@@ -1041,6 +1041,42 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
         }
 
         if (webSocketResult) {
+            updateSteps("Checking protocol compatibility... ")
+            val firstEvent = withTimeoutOrNull(7000) {
+                while (
+                    sharedState.serverProtoMajor == null &&
+                    sharedState.serverProtoMinor == null
+                ) {
+                    delay(200)
+                }
+                true
+            }
+            if (firstEvent == null) {
+                updateSteps("❌ Timed out", true)
+                connectionSuccess = false
+                showExitButton = true
+                return@LaunchedEffect
+            }
+
+            if (sharedState.serverProtoMajor == BuildConfig.CLIENT_PROTO_MAJOR &&
+                sharedState.serverProtoMinor == BuildConfig.CLIENT_PROTO_MINOR) {
+                updateSteps("✅", true)
+            }
+            else if (sharedState.serverProtoMajor != BuildConfig.CLIENT_PROTO_MAJOR){
+                updateSteps("❌ Protocol mismatch", true)
+                fatalProtocolIncompatibility = true
+                connectionSuccess = false
+                showExitButton = true
+            }
+            else if (sharedState.serverProtoMinor < BuildConfig.CLIENT_PROTO_MINOR){
+                updateSteps("⚠ Server is outdated")
+            }
+            else if (sharedState.serverProtoMinor > BuildConfig.CLIENT_PROTO_MINOR){
+                updateSteps("⚠ App is outdated")
+            }
+        }
+
+        if (!fatalProtocolIncompatibility) {
             updateSteps("Waiting for JSON file... ")
 
             val firstEvent = withTimeoutOrNull(7000) {
@@ -1052,7 +1088,6 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
                 }
                 true
             }
-
             if (firstEvent == null) {
                 updateSteps("❌ Timed out", true)
                 connectionSuccess = false
