@@ -852,7 +852,7 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
             try {
                 val cleanIp = ip.substringBefore(":")
                 val address = InetAddress.getByName(cleanIp)
-                address.isReachable(2000)
+                address.isReachable(5000)
             } catch (_: IOException) {
                 false
             }
@@ -1015,6 +1015,7 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
         val pingResult = performPing(ipAddress)
         var webSocketResult = false
         var fatalProtocolIncompatibility = false
+        var compatibilityChecked = false
 
         if (pingResult) {
             updateSteps("✅", true)
@@ -1074,25 +1075,32 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
             else if (sharedState.serverProtoMinor > BuildConfig.CLIENT_PROTO_MINOR){
                 updateSteps("⚠ App is outdated")
             }
+            compatibilityChecked = true
         }
 
-        if (!fatalProtocolIncompatibility) {
+        if (compatibilityChecked && !fatalProtocolIncompatibility) {
             updateSteps("Waiting for JSON file... ")
 
-            val firstEvent = withTimeoutOrNull(7000) {
-                while (
-                    !sharedState.isAuthRequired &&
-                    !sharedState.isJsonReceived
-                ) {
-                    delay(200)
+            if(!sharedState.isAuthRequired){
+                val firstEvent = withTimeoutOrNull(7000) {
+                    while (
+                        !sharedState.isJsonReceived
+                    ) {
+                        delay(200)
+                    }
+                    true
                 }
-                true
+                if (firstEvent == null) {
+                    updateSteps("❌ Timed out", true)
+                    connectionSuccess = false
+                    showExitButton = true
+                    return@LaunchedEffect
+                }
             }
-            if (firstEvent == null) {
-                updateSteps("❌ Timed out", true)
-                connectionSuccess = false
-                showExitButton = true
-                return@LaunchedEffect
+            else{
+                while (sharedState.isJsonReceived){
+
+                }
             }
 
             if (sharedState.isJsonReceived) {
@@ -1214,8 +1222,9 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
                     visible = sharedState.isAuthRequired,
                     onLogin = { username, password ->
                         // Compute HMAC(password, challenge) and send to server
+                        showLoginDialog = false
                         val response = computeHmacSha256(password, sharedState.receivedChallenge)
-//                        webSocketMngr.sendAuth(username, response)
+                        webSocketMngr.sendAuthentication(username, response)
                     },
                     onCancel = {
                         navController.navigate("landing")

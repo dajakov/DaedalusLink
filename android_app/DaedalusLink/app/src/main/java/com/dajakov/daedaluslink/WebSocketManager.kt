@@ -263,6 +263,20 @@ class WebSocketManager(private val analyticsLogger: AnalyticsLogger?) { // Added
         } ?: println("Failed to send WS command: $cmd")
     }
 
+    fun sendAuthentication(username: String, password: String) {
+        val json = buildJsonObject {
+            put("type", "auth")
+            put("username", username)
+            put("password", password)
+        }.toString()
+
+        webSocket?.send(json)?.let {
+            updateLastCommand("auth")
+            val count = sentPacketsInWindow.incrementAndGet()
+            if (count >= PACKET_LOSS_WINDOW_SIZE) evaluatePacketLoss()
+        } ?: println("Failed to send AUTH")
+    }
+
     private fun updateLastCommand(command: String) {
         lastCommand = command
         lastCommandTimestamp = System.currentTimeMillis()
