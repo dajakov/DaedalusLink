@@ -3,6 +3,7 @@ package com.dajakov.daedaluslink
 import android.annotation.SuppressLint
 import android.graphics.Color as AndroidColor
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -1045,8 +1046,8 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
             updateSteps("Checking protocol compatibility... ")
             val firstEvent = withTimeoutOrNull(7000) {
                 while (
-                    sharedState.serverProtoMajor == null &&
-                    sharedState.serverProtoMinor == null
+                    !sharedState.receivedProtoVersion &&
+                    !sharedState.receivedAuthInfo
                 ) {
                     delay(200)
                 }
@@ -1098,28 +1099,6 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
                 }
             }
             else{
-                while (sharedState.isJsonReceived){
-
-                }
-            }
-
-            if (sharedState.isJsonReceived) {
-                val json = sharedState.receivedJsonData
-                @Suppress("SENSELESS_COMPARISON") // I'm sure this is not senseless!
-                if (json != null) {
-                    val (valid, errorMsg) = validateConfig(json)
-
-                    if (valid) {
-                        updateSteps("✅", true)
-                    } else {
-                        updateSteps("❌ Invalid JSON", true)
-                        configError = errorMsg
-                        showConfigError = true
-                        connectionSuccess = false
-                        showExitButton = true
-                    }
-                }
-            } else if (sharedState.isAuthRequired){
                 showLoginDialog = true
 
                 // Wait for authentication to finish
@@ -1140,10 +1119,24 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
                 updateSteps("Authentication Success", true)
                 sharedState.isAuthRequired = false
                 sharedState.authCompleted = false
-            } else {
-                updateSteps("❌ No JSON Response", true)
-                connectionSuccess = false
-                showExitButton = true
+            }
+
+            if (sharedState.isJsonReceived) {
+                val json = sharedState.receivedJsonData
+                @Suppress("SENSELESS_COMPARISON") // I'm sure this is not senseless!
+                if (json != null) {
+                    val (valid, errorMsg) = validateConfig(json)
+
+                    if (valid) {
+                        updateSteps("✅", true)
+                    } else {
+                        updateSteps("❌ Invalid JSON", true)
+                        configError = errorMsg
+                        showConfigError = true
+                        connectionSuccess = false
+                        showExitButton = true
+                    }
+                }
             }
         }
 

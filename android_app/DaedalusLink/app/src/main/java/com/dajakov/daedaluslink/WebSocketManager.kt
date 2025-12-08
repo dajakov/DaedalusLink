@@ -305,18 +305,23 @@ class WebSocketManager(private val analyticsLogger: AnalyticsLogger?) { // Added
                     val challenge = json.optString("challenge")
                     val protoMajor = json.optInt("proto_major")
                     val protoMinor = json.optInt("proto_minor")
+                    val authRequired = json.optBoolean("auth_required")
                     val payload = json.opt("payload")
 
                     when (type) {
                         "checking_in_on_ya" -> {
+                            ss.receivedProtoVersion = true
                             ss.serverProtoMajor = protoMajor
                             ss.serverProtoMinor = protoMinor
+                            if(authRequired){
+                                ss.isAuthRequired = true
+                            }
                         }
                         "auth_required" -> {
+                            ss.receivedAuthInfo = true
                             if (challenge != null) {
                                 ss.receivedChallenge = challenge
                             }
-                            ss.isAuthRequired = true
                         }
                         "config" -> {
                             if (payload != null) {
@@ -358,11 +363,13 @@ class SharedState {
     var robotName by mutableStateOf("")
     var packetLossPercentage by mutableStateOf(0f)
 
+    var receivedAuthInfo by mutableStateOf(false)
     var receivedChallenge by mutableStateOf("")
     var isAuthRequired by mutableStateOf(false)
     var authCompleted by mutableStateOf(false)
     var authFailed by mutableStateOf(false)
 
+    var receivedProtoVersion by mutableStateOf(false)
     var serverProtoMajor by mutableStateOf(0)
     var serverProtoMinor by mutableStateOf(0)
 
