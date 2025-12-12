@@ -263,11 +263,11 @@ class WebSocketManager(private val analyticsLogger: AnalyticsLogger?) { // Added
         } ?: println("Failed to send WS command: $cmd")
     }
 
-    fun sendAuthentication(username: String, password: String) {
+    fun sendAuthentication(username: String, response: String) {
         val json = buildJsonObject {
             put("type", "auth")
             put("username", username)
-            put("password", password)
+            put("response", response)
         }.toString()
 
         webSocket?.send(json)?.let {
@@ -306,6 +306,8 @@ class WebSocketManager(private val analyticsLogger: AnalyticsLogger?) { // Added
                     val protoMajor = json.optInt("proto_major")
                     val protoMinor = json.optInt("proto_minor")
                     val authRequired = json.optBoolean("auth_required")
+                    val message = json.optString("message")
+                    val role = json.optString("role")
                     val payload = json.opt("payload")
 
                     when (type) {
@@ -322,6 +324,14 @@ class WebSocketManager(private val analyticsLogger: AnalyticsLogger?) { // Added
                             if (challenge != null) {
                                 ss.receivedChallenge = challenge
                             }
+                        }
+                        "auth_error" -> {
+                            ss.authFailed = true
+                            ss.receivedAuthErrorMsg = message
+                        }
+                        "auth_success" -> {
+                            ss.authCompleted = true
+                            ss.activeUserLevel = role
                         }
                         "config" -> {
                             if (payload != null) {
@@ -367,7 +377,9 @@ class SharedState {
     var receivedChallenge by mutableStateOf("")
     var isAuthRequired by mutableStateOf(false)
     var authCompleted by mutableStateOf(false)
+    var activeUserLevel by mutableStateOf("")
     var authFailed by mutableStateOf(false)
+    var receivedAuthErrorMsg by mutableStateOf("")
 
     var receivedProtoVersion by mutableStateOf(false)
     var serverProtoMajor by mutableStateOf(0)

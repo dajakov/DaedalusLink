@@ -1010,7 +1010,9 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
     }
 
     LaunchedEffect(Unit) {
+        sharedState.isJsonReceived = false
         sharedState.authFailed = false
+        sharedState.receivedAuthInfo = false
         updateSteps("Pinging $ipAddress...")
         debugText = "Connecting to $robotName... "
         val pingResult = performPing(ipAddress)
@@ -1082,27 +1084,11 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
         if (compatibilityChecked && !fatalProtocolIncompatibility) {
             updateSteps("Waiting for JSON file... ")
 
-            if(!sharedState.isAuthRequired){
-                val firstEvent = withTimeoutOrNull(7000) {
-                    while (
-                        !sharedState.isJsonReceived
-                    ) {
-                        delay(200)
-                    }
-                    true
-                }
-                if (firstEvent == null) {
-                    updateSteps("❌ Timed out", true)
-                    connectionSuccess = false
-                    showExitButton = true
-                    return@LaunchedEffect
-                }
-            }
-            else{
+            if (sharedState.isAuthRequired){
                 showLoginDialog = true
 
                 // Wait for authentication to finish
-                val authOK = withTimeoutOrNull(15000) {
+                val authOK = withTimeoutOrNull(60000) {
                     while (!sharedState.authCompleted && !sharedState.authFailed) {
                         delay(200)
                     }
@@ -1110,7 +1096,12 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
                 }
 
                 if (authOK != true) {
-                    updateSteps("❌ Authentication failed", true)
+                    if(sharedState.authFailed){
+                        updateSteps(sharedState.receivedAuthErrorMsg, true)
+                    }
+                    else{
+                        updateSteps("❌ Authentication failed", true)
+                    }
                     connectionSuccess = false
                     showExitButton = true
                     return@LaunchedEffect
@@ -1118,7 +1109,21 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
 
                 updateSteps("Authentication Success", true)
                 sharedState.isAuthRequired = false
-                sharedState.authCompleted = false
+            }
+
+            val firstEvent = withTimeoutOrNull(7000) {
+                while (
+                    !sharedState.isJsonReceived
+                ) {
+                    delay(200)
+                }
+                true
+            }
+            if (firstEvent == null) {
+                updateSteps("❌ Timed out", true)
+                connectionSuccess = false
+                showExitButton = true
+                return@LaunchedEffect
             }
 
             if (sharedState.isJsonReceived) {
@@ -1220,6 +1225,7 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
                         webSocketMngr.sendAuthentication(username, response)
                     },
                     onCancel = {
+                        showLoginDialog = false
                         navController.navigate("landing")
                     }
                 )
