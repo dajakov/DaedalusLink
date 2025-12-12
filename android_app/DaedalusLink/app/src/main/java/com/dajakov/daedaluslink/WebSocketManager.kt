@@ -273,8 +273,14 @@ class WebSocketManager(private val analyticsLogger: AnalyticsLogger?) { // Added
                     val json = JSONObject(message)
                     val type = json.getString("type")
                     val payload = json.opt("payload")
+                    val protoMajor = json.optInt("proto_major")
+                    val protoMinor = json.optInt("proto_minor")
 
                     when (type) {
+                        "checking_in_on_ya" -> {
+                            ss.serverProtoMajor = protoMajor
+                            ss.serverProtoMinor = protoMinor
+                        }
                         "config" -> {
                             if (payload != null) {
                                 ss.receivedJsonData = payload.toString()
@@ -314,6 +320,9 @@ class SharedState {
     var isJsonReceived by mutableStateOf(false)
     var robotName by mutableStateOf("")
     var packetLossPercentage by mutableStateOf(0f)
+
+    var serverProtoMajor by mutableStateOf(0)
+    var serverProtoMinor by mutableStateOf(0)
 
     fun clear() {
         isConnected = false

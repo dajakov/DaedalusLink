@@ -833,6 +833,8 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
     var configError by remember { mutableStateOf<String?>(null) }
     var showConfigError by remember { mutableStateOf(false) }
 
+    var showLoginDialog by remember { mutableStateOf(false) }
+
     fun updateSteps(step: String, isSameLine: Boolean = false) {
         steps = if (isSameLine && steps.isNotEmpty()) {
             val lastStep = steps.last() + " | " + step
@@ -907,6 +909,8 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
         debugText = "Connecting to $robotName... "
         val pingResult = performPing(ipAddress)
         var webSocketResult = false
+        var fatalProtocolIncompatibility = false
+        var compatibilityChecked = false
 
         if (pingResult) {
             updateSteps("✅", true)
@@ -934,16 +938,64 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
         }
 
         if (webSocketResult) {
-            updateSteps("Waiting for JSON file... ")
+            updateSteps("Checking protocol compatibility... ")
 
-            val jsonReceived = withTimeoutOrNull(5000) {
-                while (!sharedState.isJsonReceived) {
-                    delay(500)
+            val firstEvent = withTimeoutOrNull(7000) {
+                while (
+                    sharedState.serverProtoMajor == null &&
+                    sharedState.serverProtoMinor == null
+                ) {
+                    delay(200)
                 }
                 true
             }
+            if (firstEvent == null) {
+                updateSteps("❌ Timed out", true)
+                connectionSuccess = false
+                showExitButton = true
+                return@LaunchedEffect
+            }
 
-            if (jsonReceived == true) {
+            if (sharedState.serverProtoMajor == BuildConfig.CLIENT_PROTO_MAJOR &&
+                sharedState.serverProtoMinor == BuildConfig.CLIENT_PROTO_MINOR) {
+                updateSteps("✅", true)
+            }
+
+            else if (sharedState.serverProtoMajor != BuildConfig.CLIENT_PROTO_MAJOR){
+                updateSteps("❌ Protocol mismatch", true)
+                fatalProtocolIncompatibility = true
+                connectionSuccess = false
+                showExitButton = true
+            }
+
+            else if (sharedState.serverProtoMinor < BuildConfig.CLIENT_PROTO_MINOR){
+                updateSteps("⚠ Server is outdated")
+            }
+
+            else if (sharedState.serverProtoMinor > BuildConfig.CLIENT_PROTO_MINOR){
+                updateSteps("⚠ App is outdated")
+            }
+        }
+
+        if (compatibilityChecked && !fatalProtocolIncompatibility) {
+            updateSteps("Waiting for JSON file... ")
+
+            val firstEvent = withTimeoutOrNull(7000) {
+                while (
+                    !sharedState.isJsonReceived
+                ) {
+                    delay(200)
+                }
+                true
+            }
+            if (firstEvent == null) {
+                updateSteps("❌ Timed out", true)
+                connectionSuccess = false
+                showExitButton = true
+                return@LaunchedEffect
+            }
+
+            if (sharedState.isJsonReceived) {
                 val json = sharedState.receivedJsonData
                 @Suppress("SENSELESS_COMPARISON") // I'm sure this is not senseless!
                 if (json != null) {
@@ -959,10 +1011,6 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
                         showExitButton = true
                     }
                 }
-            } else {
-                updateSteps("❌ No JSON Response", true)
-                connectionSuccess = false
-                showExitButton = true
             }
         }
 
