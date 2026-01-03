@@ -21,8 +21,11 @@ android {
         applicationId = "com.dajakov.daedaluslink"
         minSdk = 26
         targetSdk = 35
-        versionCode = 132
-        versionName = "1.3.2"
+        versionCode = 140
+        versionName = "1.4.0"
+
+        buildConfigField("int", "CLIENT_PROTO_MAJOR", "1")
+        buildConfigField("int", "CLIENT_PROTO_MINOR", "0")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -67,6 +70,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
