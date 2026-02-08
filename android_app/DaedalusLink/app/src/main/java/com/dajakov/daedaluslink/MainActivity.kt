@@ -922,7 +922,6 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
 
         if (pingResult) {
             updateSteps("Connecting to WebSocket... ")
-            // Corrected: Removed analyticsLogger from the call, as webSocketMngr has it via constructor
             webSocketResult = webSocketMngr.connectToWebSocket(
                 "ws://$ipAddress", sharedState, heartbeatFrequency, debugViewModel, robotName
             )

@@ -32,6 +32,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -48,7 +49,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.times
+import androidx.compose.ui.zIndex
 import androidx.navigation.NavController
+import kotlin.math.roundToInt
+
 //import co.yml.charts.axis.AxisData
 //import co.yml.charts.common.extensions.formatToSinglePrecision
 //import co.yml.charts.common.model.Point
@@ -121,10 +125,41 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
         )
     }
 
+    data class InterfaceElementState(
+        val type: String,
+        val label: String,
+        val command: String,
+        var position: IntArray,
+        var size: IntArray
+    ) {
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (javaClass != other?.javaClass) return false
+
+            other as InterfaceElementState
+
+            if (type != other.type) return false
+            if (label != other.label) return false
+            if (command != other.command) return false
+            if (!position.contentEquals(other.position)) return false
+            if (!size.contentEquals(other.size)) return false
+
+            return true
+        }
+
+        override fun hashCode(): Int {
+            var result = type.hashCode()
+            result = 31 * result + label.hashCode()
+            result = 31 * result + command.hashCode()
+            result = 31 * result + position.contentHashCode()
+            result = 31 * result + size.contentHashCode()
+            return result
+        }
+    }
 
     @Composable
     fun ButtonElement(
-        element: InterfaceData,
+        element: InterfaceElementState,
         gridSize: Pair<Dp, Dp>,
         offset: Pair<Dp, Dp>,
         onPress: (String) -> Unit,
@@ -165,10 +200,11 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
 
     @Composable
     fun JoystickElement(
-        element: InterfaceData,
+        element: InterfaceElementState,
         gridSize: Pair<Dp, Dp>,
         offset: Pair<Dp, Dp>,
-        onMove: (String, Byte, Byte) -> Unit
+        onMove: (String, Byte, Byte) -> Unit,
+        onResize: (Int, Int) -> Unit
     ) {
         val (cellWidth, cellHeight) = gridSize
         val (offsetX, offsetY) = offset
@@ -182,6 +218,12 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
 
         val circleColor = MaterialTheme.colorScheme.onSurface
 
+        val resizeHandleSize = 18.dp
+
+        val isEditMode: Boolean
+
+        isEditMode = false
+
         Box(
             modifier = Modifier
                 .absoluteOffset(
@@ -193,51 +235,85 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
                     height = element.size[1] * cellHeight
                 )
                 .clip(RoundedCornerShape(20.dp))
-                .background(MaterialTheme.colorScheme.surface),
-            contentAlignment = Alignment.Center
+                .background(MaterialTheme.colorScheme.surface)
         ) {
-            Canvas(
-                modifier = Modifier
-                    .size(joystickSizeDp)
-                    .pointerInput(Unit) {
-                        detectDragGestures(
-                            onDragEnd = {
-                                offsetXInternal = 0f
-                                offsetYInternal = 0f
-                                onMove(element.command, 0, 0)
-                            },
-                            onDrag = { _, dragAmount ->
-                                val maxOffsetX = size.width / 2f - joystickRadiusPx
-                                val maxOffsetY = size.height / 2f - joystickRadiusPx
 
-                                offsetXInternal = (offsetXInternal + dragAmount.x)
-                                    .coerceIn(-maxOffsetX, maxOffsetX)
-                                offsetYInternal = (offsetYInternal + dragAmount.y)
-                                    .coerceIn(-maxOffsetY, maxOffsetY)
+            /* ──────────────── JOYSTICK ──────────────── */
 
-                                val normalizedX = ((offsetXInternal / maxOffsetX) * 127).toInt()
-                                    .coerceIn(-128, 127).toByte()
-                                val normalizedY = ((offsetYInternal / maxOffsetY) * 127).toInt()
-                                    .coerceIn(-128, 127).toByte()
+            if(!isEditMode) {
+                Canvas(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .size(joystickSizeDp)
+                        .pointerInput(Unit) {
+                            detectDragGestures(
+                                onDragEnd = {
+                                    offsetXInternal = 0f
+                                    offsetYInternal = 0f
+                                    onMove(element.command, 0, 0)
+                                },
+                                onDrag = { _, dragAmount ->
+                                    val maxOffsetX = size.width / 2f - joystickRadiusPx
+                                    val maxOffsetY = size.height / 2f - joystickRadiusPx
 
-                                onMove(element.command, normalizedX, normalizedY)
-                            }
-                        )
-                    }
-            ) {
-                val center = Offset(size.width / 2, size.height / 2)
-                drawCircle(
-                    color = circleColor,
-                    radius = joystickRadiusPx,
-                    center = center + Offset(offsetXInternal, offsetYInternal)
-                )
+                                    offsetXInternal = (offsetXInternal + dragAmount.x)
+                                        .coerceIn(-maxOffsetX, maxOffsetX)
+                                    offsetYInternal = (offsetYInternal + dragAmount.y)
+                                        .coerceIn(-maxOffsetY, maxOffsetY)
+
+                                    val normalizedX =
+                                        ((offsetXInternal / maxOffsetX) * 127)
+                                            .toInt().coerceIn(-128, 127).toByte()
+                                    val normalizedY =
+                                        ((offsetYInternal / maxOffsetY) * 127)
+                                            .toInt().coerceIn(-128, 127).toByte()
+
+                                    onMove(element.command, normalizedX, normalizedY)
+                                }
+                            )
+                        }
+                ) {
+                    val center = Offset(size.width / 2, size.height / 2)
+                    drawCircle(
+                        color = circleColor,
+                        radius = joystickRadiusPx,
+                        center = center + Offset(offsetXInternal, offsetYInternal)
+                    )
+                }
             }
+            /* ──────────────── RESIZE HANDLE ──────────────── */
+
+//            else {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .size(resizeHandleSize)
+                        .background(
+                            MaterialTheme.colorScheme.primary,
+                            shape = CircleShape
+                        )
+                        .pointerInput(gridSize) {
+                            detectDragGestures { _, dragAmount ->
+
+                                val dxCells = (dragAmount.x / cellWidth.toPx()).roundToInt()
+                                val dyCells = (dragAmount.y / cellHeight.toPx()).roundToInt()
+
+                                if (dxCells != 0 || dyCells != 0) {
+                                    onResize(
+                                        (element.size[0] + dxCells).coerceAtLeast(1),
+                                        (element.size[1] + dyCells).coerceAtLeast(1)
+                                    )
+                                }
+                            }
+                        }
+                )
+//            }
         }
     }
 
     @Composable
     fun SliderElement(
-        element: InterfaceData,
+        element: InterfaceElementState,
         gridSize: Pair<Dp, Dp>,
         offset: Pair<Dp, Dp>,
         onValueChange: (String, Byte) -> Unit
@@ -355,9 +431,29 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
     fun DynamicUI(jsonString: String, webSocketInterface: WebSocketManager) {
         val config = remember { json.decodeFromString<LinkConfig>(jsonString) }
 
+        val initialConfig = remember(jsonString) {
+            json.decodeFromString<LinkConfig>(jsonString)
+        }
+
+        val elements = remember {
+            mutableStateListOf<InterfaceElementState>().apply {
+                initialConfig.interfaceData.forEach {
+                    add(
+                        InterfaceElementState(
+                            type = it.type,
+                            command = it.command,
+                            position = it.position.toIntArray(),
+                            size = it.size.toIntArray(),
+                            label = it.label
+                        )
+                    )
+                }
+            }
+        }
+
         GridLayout { gridSize, offset ->
             Box(modifier = Modifier.fillMaxSize()) {
-                config.interfaceData.forEach { element ->
+                elements.forEach { element ->
                     when (element.type) {
                         "button" -> ButtonElement(
                             element, gridSize, offset,
@@ -365,8 +461,16 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
                             onRelease = { cmd -> webSocketInterface.sendCommand("!$cmd") }
                         )
                         "joystick" -> JoystickElement(
-                            element, gridSize, offset,
-                            onMove = {cmd, x, y -> webSocketInterface.sendMovementCommand(cmd, x, y) }
+                            element = element,
+                            gridSize = gridSize,
+                            offset = offset,
+                            onMove = { cmd, x, y ->
+                                webSocketInterface.sendMovementCommand(cmd, x, y)
+                            },
+                            onResize = { newW, newH ->
+                                element.size[0] = newW
+                                element.size[1] = newH
+                            }
                         )
                         "slider" -> SliderElement(
                             element, gridSize, offset,
