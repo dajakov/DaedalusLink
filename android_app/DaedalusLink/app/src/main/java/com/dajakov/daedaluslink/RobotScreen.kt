@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -33,6 +34,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -42,6 +44,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.input.pointer.pointerInput
@@ -205,17 +208,12 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
         gridSize: Pair<Dp, Dp>,
         offset: Pair<Dp, Dp>,
         onMove: (String, Byte, Byte) -> Unit,
-        onResize: (Int, Int) -> Unit
+        onResize: (Int, Int) -> Unit,
+        onPositionChange: (Int, Int) -> Unit
     ) {
         val (cellWidth, cellHeight) = gridSize
         val (offsetX, offsetY) = offset
         val density = LocalDensity.current
-
-        val currentWidth by rememberUpdatedState(element.size[0])
-        val currentHeight by rememberUpdatedState(element.size[1])
-
-        var dragAccumulatorX by remember { mutableFloatStateOf(0f) }
-        var dragAccumulatorY by remember { mutableFloatStateOf(0f) }
 
         val joystickSizeDp = element.size[0] * cellWidth
         val joystickRadiusPx = with(density) { 40.dp.toPx() }
@@ -223,8 +221,20 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
         var offsetXInternal by remember { mutableFloatStateOf(0f) }
         var offsetYInternal by remember { mutableFloatStateOf(0f) }
 
-        val circleColor = MaterialTheme.colorScheme.onSurface
+        val currentWidth by rememberUpdatedState(element.size[0])
+        val currentHeight by rememberUpdatedState(element.size[1])
+        val currentX by rememberUpdatedState(element.position[0])
+        val currentY by rememberUpdatedState(element.position[1])
 
+        var resizeAccumulatorX by remember { mutableFloatStateOf(0f) }
+        var resizeAccumulatorY by remember { mutableFloatStateOf(0f) }
+
+        var moveAccumulatorX by remember { mutableFloatStateOf(0f) }
+        var moveAccumulatorY by remember { mutableFloatStateOf(0f) }
+
+        var isEditing by remember { mutableStateOf(false) }
+
+        val circleColor = MaterialTheme.colorScheme.onSurface
         val resizeHandleSize = 18.dp
 
         val isEditMode: Boolean
@@ -243,6 +253,39 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
                 )
                 .clip(RoundedCornerShape(20.dp))
                 .background(MaterialTheme.colorScheme.surface)
+                .then(
+                    if (isEditing) Modifier.border(2.dp, Color.White, RoundedCornerShape(20.dp))
+                    else Modifier
+                )
+                .pointerInput(gridSize) {
+                    if (!isEditMode) return@pointerInput
+                    detectDragGestures(
+                        onDragStart = {
+                            isEditing = true
+                            moveAccumulatorX = 0f
+                            moveAccumulatorY = 0f
+                        },
+                        onDragEnd = { isEditing = false },
+                        onDragCancel = { isEditing = false },
+                        onDrag = { change, dragAmount ->
+                            change.consume()
+                            moveAccumulatorX += dragAmount.x
+                            moveAccumulatorY += dragAmount.y
+
+                            val cellWidthPx = cellWidth.toPx()
+                            val cellHeightPx = cellHeight.toPx()
+
+                            val dxCells = (moveAccumulatorX / cellWidthPx).toInt()
+                            val dyCells = (moveAccumulatorY / cellHeightPx).toInt()
+
+                            if (dxCells != 0 || dyCells != 0) {
+                                onPositionChange(currentX + dxCells, currentY + dyCells)
+                                if (dxCells != 0) moveAccumulatorX -= dxCells * cellWidthPx
+                                if (dyCells != 0) moveAccumulatorY -= dyCells * cellHeightPx
+                            }
+                        }
+                    )
+                }
         ) {
 
             /* ──────────────── JOYSTICK ──────────────── */
@@ -268,12 +311,10 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
                                     offsetYInternal = (offsetYInternal + dragAmount.y)
                                         .coerceIn(-maxOffsetY, maxOffsetY)
 
-                                    val normalizedX =
-                                        ((offsetXInternal / maxOffsetX) * 127)
-                                            .toInt().coerceIn(-128, 127).toByte()
-                                    val normalizedY =
-                                        ((offsetYInternal / maxOffsetY) * 127)
-                                            .toInt().coerceIn(-128, 127).toByte()
+                                    val normalizedX = ((offsetXInternal / maxOffsetX) * 127)
+                                        .toInt().coerceIn(-128, 127).toByte()
+                                    val normalizedY = ((offsetYInternal / maxOffsetY) * 127)
+                                        .toInt().coerceIn(-128, 127).toByte()
 
                                     onMove(element.command, normalizedX, normalizedY)
                                 }
@@ -290,45 +331,45 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
             }
             /* ──────────────── RESIZE HANDLE ──────────────── */
 
-//            else {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .size(resizeHandleSize)
-                    .background(MaterialTheme.colorScheme.primary, shape = CircleShape)
-                    .pointerInput(element.command) {
-                        detectDragGestures(
-                            onDragStart = {
-                                dragAccumulatorX = 0f
-                                dragAccumulatorY = 0f
-                            },
-                            onDrag = { change, dragAmount ->
-                                change.consume()
-                                dragAccumulatorX += dragAmount.x
-                                dragAccumulatorY += dragAmount.y
+            else {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .size(resizeHandleSize)
+                        .background(MaterialTheme.colorScheme.onPrimary, shape = CircleShape)
+                        .pointerInput(gridSize) {
+                            detectDragGestures(
+                                onDragStart = {
+                                    isEditing = true
+                                    resizeAccumulatorX = 0f
+                                    resizeAccumulatorY = 0f
+                                },
+                                onDragEnd = { isEditing = false },
+                                onDragCancel = { isEditing = false },
+                                onDrag = { change, dragAmount ->
+                                    change.consume()
+                                    resizeAccumulatorX += dragAmount.x
+                                    resizeAccumulatorY += dragAmount.y
 
-                                val cellWidthPx = gridSize.first.toPx()
-                                val cellHeightPx = gridSize.second.toPx()
+                                    val cellWidthPx = cellWidth.toPx()
+                                    val cellHeightPx = cellHeight.toPx()
 
-                                val dxCells = (dragAccumulatorX / cellWidthPx).toInt()
-                                val dyCells = (dragAccumulatorY / cellHeightPx).toInt()
+                                    val dxCells = (resizeAccumulatorX / cellWidthPx).toInt()
+                                    val dyCells = (resizeAccumulatorY / cellHeightPx).toInt()
 
-                                if (dxCells != 0 || dyCells != 0) {
-                                    // Use the updated currentWidth/Height instead of element.size
-                                    val newW = (currentWidth + dxCells).coerceAtLeast(1)
-                                    val newH = (currentHeight + dyCells).coerceAtLeast(1)
-
-                                    onResize(newW, newH)
-
-                                    // Only subtract what was actually used to increment/decrement
-                                    dragAccumulatorX -= dxCells * cellWidthPx
-                                    dragAccumulatorY -= dyCells * cellHeightPx
+                                    if (dxCells != 0 || dyCells != 0) {
+                                        onResize(
+                                            (currentWidth + dxCells).coerceAtLeast(1),
+                                            (currentHeight + dyCells).coerceAtLeast(1)
+                                        )
+                                        if (dxCells != 0) resizeAccumulatorX -= dxCells * cellWidthPx
+                                        if (dyCells != 0) resizeAccumulatorY -= dyCells * cellHeightPx
+                                    }
                                 }
-                            }
-                        )
-                    }
-            )
-//            }
+                            )
+                        }
+                )
+            }
         }
     }
 
@@ -412,7 +453,7 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
                         drawRoundRect(
                             color = trackColor,
                             topLeft = Offset(thumbRadius, (size.height - trackThickness) / 2f),
-                            size = androidx.compose.ui.geometry.Size(trackActualWidth, trackThickness),
+                            size = Size(trackActualWidth, trackThickness),
                             cornerRadius = CornerRadius(trackCornerRadiusValue, trackCornerRadiusValue)
                         )
                         // Draw Thumb
@@ -497,8 +538,14 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
                             onResize = { newW, newH ->
                                 val index = elements.indexOfFirst { it.command == element.command }
                                 if (index != -1) {
-                                    // We create a NEW object with a NEW IntArray to ensure Compose sees the change
-                                    elements[index] = elements[index].copy(size = intArrayOf(newW, newH))
+                                    elements[index] =
+                                        elements[index].copy(size = intArrayOf(newW, newH))
+                                }
+                            },
+                            onPositionChange = { newX, newY ->
+                                val index = elements.indexOfFirst { it.command == element.command }
+                                if (index != -1) {
+                                    elements[index] = elements[index].copy(position = intArrayOf(newX, newY))
                                 }
                             }
                         )
