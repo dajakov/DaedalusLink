@@ -34,6 +34,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -210,6 +211,12 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
         val (offsetX, offsetY) = offset
         val density = LocalDensity.current
 
+        val currentWidth by rememberUpdatedState(element.size[0])
+        val currentHeight by rememberUpdatedState(element.size[1])
+
+        var dragAccumulatorX by remember { mutableFloatStateOf(0f) }
+        var dragAccumulatorY by remember { mutableFloatStateOf(0f) }
+
         val joystickSizeDp = element.size[0] * cellWidth
         val joystickRadiusPx = with(density) { 40.dp.toPx() }
 
@@ -222,7 +229,7 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
 
         val isEditMode: Boolean
 
-        isEditMode = false
+        isEditMode = true
 
         Box(
             modifier = Modifier
@@ -284,29 +291,43 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
             /* ──────────────── RESIZE HANDLE ──────────────── */
 
 //            else {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .size(resizeHandleSize)
-                        .background(
-                            MaterialTheme.colorScheme.primary,
-                            shape = CircleShape
-                        )
-                        .pointerInput(gridSize) {
-                            detectDragGestures { _, dragAmount ->
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .size(resizeHandleSize)
+                    .background(MaterialTheme.colorScheme.primary, shape = CircleShape)
+                    .pointerInput(element.command) {
+                        detectDragGestures(
+                            onDragStart = {
+                                dragAccumulatorX = 0f
+                                dragAccumulatorY = 0f
+                            },
+                            onDrag = { change, dragAmount ->
+                                change.consume()
+                                dragAccumulatorX += dragAmount.x
+                                dragAccumulatorY += dragAmount.y
 
-                                val dxCells = (dragAmount.x / cellWidth.toPx()).roundToInt()
-                                val dyCells = (dragAmount.y / cellHeight.toPx()).roundToInt()
+                                val cellWidthPx = gridSize.first.toPx()
+                                val cellHeightPx = gridSize.second.toPx()
+
+                                val dxCells = (dragAccumulatorX / cellWidthPx).toInt()
+                                val dyCells = (dragAccumulatorY / cellHeightPx).toInt()
 
                                 if (dxCells != 0 || dyCells != 0) {
-                                    onResize(
-                                        (element.size[0] + dxCells).coerceAtLeast(1),
-                                        (element.size[1] + dyCells).coerceAtLeast(1)
-                                    )
+                                    // Use the updated currentWidth/Height instead of element.size
+                                    val newW = (currentWidth + dxCells).coerceAtLeast(1)
+                                    val newH = (currentHeight + dyCells).coerceAtLeast(1)
+
+                                    onResize(newW, newH)
+
+                                    // Only subtract what was actually used to increment/decrement
+                                    dragAccumulatorX -= dxCells * cellWidthPx
+                                    dragAccumulatorY -= dyCells * cellHeightPx
                                 }
                             }
-                        }
-                )
+                        )
+                    }
+            )
 //            }
         }
     }
@@ -344,7 +365,8 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
                 .pointerInput(Unit) {
                     detectDragGestures { change, _ ->
                         val isHorizontal = size.width >= size.height
-                        val thumbRadiusVisual = if (isHorizontal) size.height * 0.4f else size.width * 0.4f // Used for visual padding
+                        val thumbRadiusVisual =
+                            if (isHorizontal) size.height * 0.4f else size.width * 0.4f // Used for visual padding
 
                         val newPositionNormalized = if (isHorizontal) {
                             val trackActualWidth = size.width - 2 * thumbRadiusVisual
@@ -360,12 +382,17 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
                                 0.5f // Default to center if track is too small
                             } else {
                                 val rawY = change.position.y - thumbRadiusVisual
-                                (1 - (rawY / trackActualHeight)).coerceIn(0f, 1f) // Inverted for Y-axis
+                                (1 - (rawY / trackActualHeight)).coerceIn(
+                                    0f,
+                                    1f
+                                ) // Inverted for Y-axis
                             }
                         }
                         sliderPositionNormalized = newPositionNormalized
 
-                        val byteValue = (sliderPositionNormalized * 255f - 128f).toInt().coerceIn(-128, 127).toByte()
+                        val byteValue =
+                            (sliderPositionNormalized * 255f - 128f).toInt().coerceIn(-128, 127)
+                                .toByte()
                         onValueChange(element.command, byteValue)
                         change.consume()
                     }
@@ -468,8 +495,11 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
                                 webSocketInterface.sendMovementCommand(cmd, x, y)
                             },
                             onResize = { newW, newH ->
-                                element.size[0] = newW
-                                element.size[1] = newH
+                                val index = elements.indexOfFirst { it.command == element.command }
+                                if (index != -1) {
+                                    // We create a NEW object with a NEW IntArray to ensure Compose sees the change
+                                    elements[index] = elements[index].copy(size = intArrayOf(newW, newH))
+                                }
                             }
                         )
                         "slider" -> SliderElement(
@@ -634,7 +664,9 @@ fun SettingsScreen(navController: NavController) {
         topBar = { },
     ) {
         // TODO: Implement Settings Screen UI
-        Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+        Column(modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)) {
             Text("Settings Screen Placeholder", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onPrimary)
         }
     }
