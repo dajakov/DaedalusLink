@@ -10,6 +10,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -47,6 +48,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
@@ -70,6 +72,82 @@ import kotlin.math.roundToInt
 //import co.yml.charts.ui.linechart.model.SelectionHighlightPoint
 //import co.yml.charts.ui.linechart.model.SelectionHighlightPopUp
 //import co.yml.charts.ui.linechart.model.ShadowUnderLine
+
+object UIElementLogic {
+    suspend fun PointerInputScope.handleMoveDrag(
+        gridSize: Pair<Dp, Dp>,
+        getCurrentX: () -> Int,
+        getCurrentY: () -> Int,
+        onEditingChange: (Boolean) -> Unit,
+        onPositionChange: (Int, Int) -> Unit
+    ) {
+        val (cellWidth, cellHeight) = gridSize
+        var moveAccumulatorX = 0f
+        var moveAccumulatorY = 0f
+
+        detectDragGestures(
+            onDragStart = { onEditingChange(true) },
+            onDragEnd = { onEditingChange(false) },
+            onDragCancel = { onEditingChange(false) },
+            onDrag = { change, dragAmount ->
+                change.consume()
+                moveAccumulatorX += dragAmount.x
+                moveAccumulatorY += dragAmount.y
+
+                val cellWidthPx = cellWidth.toPx()
+                val cellHeightPx = cellHeight.toPx()
+
+                val dxCells = (moveAccumulatorX / cellWidthPx).toInt()
+                val dyCells = (moveAccumulatorY / cellHeightPx).toInt()
+
+                if (dxCells != 0 || dyCells != 0) {
+                    onPositionChange(getCurrentX() + dxCells, getCurrentY() + dyCells)
+                    moveAccumulatorX -= dxCells * cellWidthPx
+                    moveAccumulatorY -= dyCells * cellHeightPx
+                }
+            }
+        )
+    }
+
+    suspend fun PointerInputScope.handleResizeDrag(
+        gridSize: Pair<Dp, Dp>,
+        getCurrentWidth: () -> Int,    // Changed to lambda
+        getCurrentHeight: () -> Int,   // Changed to lambda
+        onEditingChange: (Boolean) -> Unit,
+        onResize: (Int, Int) -> Unit
+    ) {
+        val (cellWidth, cellHeight) = gridSize
+        var resizeAccumulatorX = 0f
+        var resizeAccumulatorY = 0f
+
+        detectDragGestures(
+            onDragStart = { onEditingChange(true) },
+            onDragEnd = { onEditingChange(false) },
+            onDragCancel = { onEditingChange(false) },
+            onDrag = { change, dragAmount ->
+                change.consume() // CRITICAL: Prevents parent from moving
+                resizeAccumulatorX += dragAmount.x
+                resizeAccumulatorY += dragAmount.y
+
+                val cellWidthPx = cellWidth.toPx()
+                val cellHeightPx = cellHeight.toPx()
+
+                val dxCells = (resizeAccumulatorX / cellWidthPx).toInt()
+                val dyCells = (resizeAccumulatorY / cellHeightPx).toInt()
+
+                if (dxCells != 0 || dyCells != 0) {
+                    onResize(
+                        (getCurrentWidth() + dxCells).coerceAtLeast(1),
+                        (getCurrentHeight() + dyCells).coerceAtLeast(1)
+                    )
+                    // Subtract only the consumed distance
+                    if (dxCells != 0) resizeAccumulatorX -= dxCells * cellWidthPx
+                    if (dyCells != 0) resizeAccumulatorY -= dyCells * cellHeightPx
+                }
+            }
+        )
+    }
+}
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -162,42 +240,100 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
     }
 
     @Composable
+    fun BoxScope.ResizeHandle(
+        gridSize: Pair<Dp, Dp>,
+        currentWidth: Int,
+        currentHeight: Int,
+        onEditingChange: (Boolean) -> Unit,
+        onResize: (Int, Int) -> Unit
+    ) {
+        // Wrap current values in lambdas so handleResizeDrag always sees the latest
+        val getW = rememberUpdatedState(currentWidth)
+        val getH = rememberUpdatedState(currentHeight)
+
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .size(24.dp)
+                .background(MaterialTheme.colorScheme.primary, shape = CircleShape)
+                .pointerInput(gridSize) { // Key ONLY by gridSize
+                    UIElementLogic.run {
+                        handleResizeDrag(
+                            gridSize = gridSize,
+                            getCurrentWidth = { getW.value },
+                            getCurrentHeight = { getH.value },
+                            onEditingChange = onEditingChange,
+                            onResize = onResize
+                        )
+                    }
+                }
+        )
+    }
+
+    @Composable
     fun ButtonElement(
         element: InterfaceElementState,
         gridSize: Pair<Dp, Dp>,
         offset: Pair<Dp, Dp>,
         onPress: (String) -> Unit,
-        onRelease: (String) -> Unit
+        onRelease: (String) -> Unit,
+        onResize: (Int, Int) -> Unit,
+        onPositionChange: (Int, Int) -> Unit,
+        isEditMode: Boolean
     ) {
         val (cellWidth, cellHeight) = gridSize
-        val (offsetX, offsetY) = offset
+        val currentWidth by rememberUpdatedState(element.size[0])
+        val currentHeight by rememberUpdatedState(element.size[1])
+        val currentX by rememberUpdatedState(element.position[0])
+        val currentY by rememberUpdatedState(element.position[1])
+
+        var isEditing by remember { mutableStateOf(false) }
         val interactionSource = remember { MutableInteractionSource() }
         val isPressed by interactionSource.collectIsPressedAsState()
 
         LaunchedEffect(isPressed) {
-            if (isPressed) onPress(element.command)
-            else onRelease(element.command)
+            if (!isEditMode) {
+                if (isPressed) onPress(element.command)
+                else onRelease(element.command)
+            }
         }
 
         Box(
             modifier = Modifier
                 .absoluteOffset(
-                    x = offsetX + element.position[0] * cellWidth + 1.dp,
-                    y = offsetY + element.position[1] * cellHeight + 1.dp
+                    x = offset.first + currentX * cellWidth + 1.dp,
+                    y = offset.second + currentY * cellHeight + 1.dp
                 )
-                .size(
-                    width = element.size[0] * cellWidth - 2.dp,
-                    height = element.size[1] * cellHeight - 2.dp
-                )
+                .size(currentWidth * cellWidth - 2.dp, currentHeight * cellHeight - 2.dp)
+                .then(if (isEditing) Modifier.border(2.dp, Color.White, RectangleShape) else Modifier)
+                // KEY FIX: Only key by gridSize and isEditMode.
+                // DO NOT key by currentX/Y or the drag will reset every 1-cell move.
+                .pointerInput(gridSize, isEditMode) {
+                    if (!isEditMode) return@pointerInput
+                    UIElementLogic.run {
+                        handleMoveDrag(
+                            gridSize = gridSize,
+                            getCurrentX = { currentX },
+                            getCurrentY = { currentY },
+                            onEditingChange = { isEditing = it },
+                            onPositionChange = onPositionChange
+                        )
+                    }
+                }
         ) {
             Button(
                 onClick = {},
                 interactionSource = interactionSource,
                 modifier = Modifier.fillMaxSize(),
+                shape = RectangleShape,
                 colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.surface),
-                shape = RectangleShape
+                enabled = !isEditMode
             ) {
                 Text(element.label, color = MaterialTheme.colorScheme.onSurface)
+            }
+
+            if (isEditMode) {
+                ResizeHandle(gridSize, currentWidth, currentHeight, { isEditing = it }, onResize)
             }
         }
     }
@@ -378,15 +514,28 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
         element: InterfaceElementState,
         gridSize: Pair<Dp, Dp>,
         offset: Pair<Dp, Dp>,
-        onValueChange: (String, Byte) -> Unit
+        onValueChange: (String, Byte) -> Unit,
+        onResize: (Int, Int) -> Unit,
+        onPositionChange: (Int, Int) -> Unit
     ) {
         val (cellWidth, cellHeight) = gridSize
         val (offsetX, offsetY) = offset
 
-        val sliderViewWidthDp = element.size[0] * cellWidth
-        val sliderViewHeightDp = element.size[1] * cellHeight
+        val currentWidth by rememberUpdatedState(element.size[0])
+        val currentHeight by rememberUpdatedState(element.size[1])
+        val currentX by rememberUpdatedState(element.position[0])
+        val currentY by rememberUpdatedState(element.position[1])
 
-        var sliderPositionNormalized by remember { mutableFloatStateOf(0f) } // 0f (left/bottom) to 1f (right/top)
+        var sliderPositionNormalized by remember { mutableFloatStateOf(0f) }
+        var isEditing by remember { mutableStateOf(false) }
+
+        // Accumulators
+        var moveAccumulatorX by remember { mutableFloatStateOf(0f) }
+        var moveAccumulatorY by remember { mutableFloatStateOf(0f) }
+        var resizeAccumulatorX by remember { mutableFloatStateOf(0f) }
+        var resizeAccumulatorY by remember { mutableFloatStateOf(0f) }
+
+        val isEditMode = true // This should be controlled by your global state
 
         val trackColor = MaterialTheme.colorScheme.surface
         val thumbColor = MaterialTheme.colorScheme.onSurface
@@ -399,47 +548,75 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
                     y = offsetY + element.position[1] * cellHeight
                 )
                 .size(
-                    width = sliderViewWidthDp,
-                    height = sliderViewHeightDp
+                    width = element.size[0] * cellWidth,
+                    height = element.size[1] * cellHeight
                 )
                 .background(MaterialTheme.colorScheme.primary)
-                .pointerInput(Unit) {
-                    detectDragGestures { change, _ ->
-                        val isHorizontal = size.width >= size.height
-                        val thumbRadiusVisual =
-                            if (isHorizontal) size.height * 0.4f else size.width * 0.4f // Used for visual padding
+                .clip(RoundedCornerShape(8.dp))
+                .then(
+                    if (isEditing) Modifier.border(2.dp, Color.White, RoundedCornerShape(8.dp))
+                    else Modifier
+                )
+                .pointerInput(gridSize) {
+                    if (!isEditMode) {
+                        // NORMAL SLIDER LOGIC
+                        detectDragGestures { change, _ ->
+                            val isHorizontal = size.width >= size.height
+                            val thumbRadiusVisual =
+                                if (isHorizontal) size.height * 0.4f else size.width * 0.4f
 
-                        val newPositionNormalized = if (isHorizontal) {
-                            val trackActualWidth = size.width - 2 * thumbRadiusVisual
-                            if (trackActualWidth <= 0) { // Avoid division by zero or negative
-                                0.5f // Default to center if track is too small
+                            val newPositionNormalized = if (isHorizontal) {
+                                val trackActualWidth = size.width - 2 * thumbRadiusVisual
+                                if (trackActualWidth <= 0) 0.5f
+                                else (change.position.x - thumbRadiusVisual).div(trackActualWidth)
+                                    .coerceIn(0f, 1f)
                             } else {
-                                val rawX = change.position.x - thumbRadiusVisual
-                                (rawX / trackActualWidth).coerceIn(0f, 1f)
+                                val trackActualHeight = size.height - 2 * thumbRadiusVisual
+                                if (trackActualHeight <= 0) 0.5f
+                                else (1 - (change.position.y - thumbRadiusVisual).div(
+                                    trackActualHeight
+                                )).coerceIn(0f, 1f)
                             }
-                        } else { // Vertical
-                            val trackActualHeight = size.height - 2 * thumbRadiusVisual
-                            if (trackActualHeight <= 0) { // Avoid division by zero or negative
-                                0.5f // Default to center if track is too small
-                            } else {
-                                val rawY = change.position.y - thumbRadiusVisual
-                                (1 - (rawY / trackActualHeight)).coerceIn(
-                                    0f,
-                                    1f
-                                ) // Inverted for Y-axis
-                            }
+                            sliderPositionNormalized = newPositionNormalized
+                            val byteValue =
+                                (sliderPositionNormalized * 255f - 128f).toInt().coerceIn(-128, 127)
+                                    .toByte()
+                            onValueChange(element.command, byteValue)
+                            change.consume()
                         }
-                        sliderPositionNormalized = newPositionNormalized
+                    } else {
+                        // EDIT MODE: MOVE LOGIC
+                        detectDragGestures(
+                            onDragStart = {
+                                isEditing = true
+                                moveAccumulatorX = 0f
+                                moveAccumulatorY = 0f
+                            },
+                            onDragEnd = { isEditing = false },
+                            onDragCancel = { isEditing = false },
+                            onDrag = { change, dragAmount ->
+                                change.consume()
+                                moveAccumulatorX += dragAmount.x
+                                moveAccumulatorY += dragAmount.y
 
-                        val byteValue =
-                            (sliderPositionNormalized * 255f - 128f).toInt().coerceIn(-128, 127)
-                                .toByte()
-                        onValueChange(element.command, byteValue)
-                        change.consume()
+                                val cellWidthPx = cellWidth.toPx()
+                                val cellHeightPx = cellHeight.toPx()
+
+                                val dxCells = (moveAccumulatorX / cellWidthPx).toInt()
+                                val dyCells = (moveAccumulatorY / cellHeightPx).toInt()
+
+                                if (dxCells != 0 || dyCells != 0) {
+                                    onPositionChange(currentX + dxCells, currentY + dyCells)
+                                    if (dxCells != 0) moveAccumulatorX -= dxCells * cellWidthPx
+                                    if (dyCells != 0) moveAccumulatorY -= dyCells * cellHeightPx
+                                }
+                            }
+                        )
                     }
                 },
             contentAlignment = Alignment.Center
         ) {
+            // Slider Drawing Logic (Same as before)
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val isHorizontal = size.width >= size.height
                 val trackThickness = if (isHorizontal) size.height * 0.25f else size.width * 0.25f
@@ -449,41 +626,30 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
                 if (isHorizontal) {
                     val trackActualWidth = size.width - 2 * thumbRadius
                     if (trackActualWidth > 0) {
-                        // Draw Track
                         drawRoundRect(
                             color = trackColor,
                             topLeft = Offset(thumbRadius, (size.height - trackThickness) / 2f),
-                            size = Size(trackActualWidth, trackThickness),
+                            size = androidx.compose.ui.geometry.Size(trackActualWidth, trackThickness),
                             cornerRadius = CornerRadius(trackCornerRadiusValue, trackCornerRadiusValue)
                         )
-                        // Draw Thumb
                         val thumbCenterX = thumbRadius + (sliderPositionNormalized * trackActualWidth)
-                        drawCircle(
-                            color = thumbColor,
-                            radius = thumbRadius,
-                            center = Offset(thumbCenterX, size.height / 2f)
-                        )
+                        drawCircle(color = thumbColor, radius = thumbRadius, center = Offset(thumbCenterX, size.height / 2f))
                     }
-                } else { // Vertical slider
+                } else {
                     val trackActualHeight = size.height - 2 * thumbRadius
                     if (trackActualHeight > 0) {
-                        // Draw Track
                         drawRoundRect(
                             color = trackColor,
                             topLeft = Offset((size.width - trackThickness) / 2f, thumbRadius),
                             size = androidx.compose.ui.geometry.Size(trackThickness, trackActualHeight),
                             cornerRadius = CornerRadius(trackCornerRadiusValue, trackCornerRadiusValue)
                         )
-                        // Draw Thumb
                         val thumbCenterY = thumbRadius + ((1 - sliderPositionNormalized) * trackActualHeight)
-                        drawCircle(
-                            color = thumbColor,
-                            radius = thumbRadius,
-                            center = Offset(size.width / 2f, thumbCenterY)
-                        )
+                        drawCircle(color = thumbColor, radius = thumbRadius, center = Offset(size.width / 2f, thumbCenterY))
                     }
                 }
             }
+
             Text(
                 text = element.label,
                 modifier = Modifier
@@ -492,6 +658,47 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
                 color = labelColor,
                 style = MaterialTheme.typography.bodySmall
             )
+
+            // EDIT MODE: RESIZE HANDLE
+            if (isEditMode) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .size(18.dp)
+                        .background(MaterialTheme.colorScheme.onPrimary, shape = CircleShape)
+                        .pointerInput(gridSize) {
+                            detectDragGestures(
+                                onDragStart = {
+                                    isEditing = true
+                                    resizeAccumulatorX = 0f
+                                    resizeAccumulatorY = 0f
+                                },
+                                onDragEnd = { isEditing = false },
+                                onDragCancel = { isEditing = false },
+                                onDrag = { change, dragAmount ->
+                                    change.consume()
+                                    resizeAccumulatorX += dragAmount.x
+                                    resizeAccumulatorY += dragAmount.y
+
+                                    val cellWidthPx = cellWidth.toPx()
+                                    val cellHeightPx = cellHeight.toPx()
+
+                                    val dxCells = (resizeAccumulatorX / cellWidthPx).toInt()
+                                    val dyCells = (resizeAccumulatorY / cellHeightPx).toInt()
+
+                                    if (dxCells != 0 || dyCells != 0) {
+                                        onResize(
+                                            (currentWidth + dxCells).coerceAtLeast(1),
+                                            (currentHeight + dyCells).coerceAtLeast(1)
+                                        )
+                                        if (dxCells != 0) resizeAccumulatorX -= dxCells * cellWidthPx
+                                        if (dyCells != 0) resizeAccumulatorY -= dyCells * cellHeightPx
+                                    }
+                                }
+                            )
+                        }
+                )
+            }
         }
     }
 
@@ -524,9 +731,24 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
                 elements.forEach { element ->
                     when (element.type) {
                         "button" -> ButtonElement(
-                            element, gridSize, offset,
+                            element = element,
+                            gridSize = gridSize,
+                            offset = offset,
                             onPress = { cmd -> webSocketInterface.sendCommand(cmd) },
-                            onRelease = { cmd -> webSocketInterface.sendCommand("!$cmd") }
+                            onRelease = { cmd -> webSocketInterface.sendCommand("!$cmd") },
+                            onResize = { newW, newH ->
+                                val index = elements.indexOfFirst { it.command == element.command }
+                                if (index != -1) {
+                                    elements[index] = elements[index].copy(size = intArrayOf(newW, newH))
+                                }
+                            },
+                            onPositionChange = { newX, newY ->
+                                val index = elements.indexOfFirst { it.command == element.command }
+                                if (index != -1) {
+                                    elements[index] = elements[index].copy(position = intArrayOf(newX, newY))
+                                }
+                            },
+                            isEditMode = true
                         )
                         "joystick" -> JoystickElement(
                             element = element,
@@ -553,6 +775,19 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
                             element, gridSize, offset,
                             onValueChange = { cmd, value ->
                                 webSocketInterface.sendSliderCommand(cmd, value)
+                            },
+                            onResize = { newW, newH ->
+                                val index = elements.indexOfFirst { it.command == element.command }
+                                if (index != -1) {
+                                    elements[index] =
+                                        elements[index].copy(size = intArrayOf(newW, newH))
+                                }
+                            },
+                            onPositionChange = { newX, newY ->
+                                val index = elements.indexOfFirst { it.command == element.command }
+                                if (index != -1) {
+                                    elements[index] = elements[index].copy(position = intArrayOf(newX, newY))
+                                }
                             }
                         )
                     }
