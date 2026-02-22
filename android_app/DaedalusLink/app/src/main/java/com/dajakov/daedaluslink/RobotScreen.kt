@@ -6,6 +6,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -538,6 +539,135 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
     }
 
     @Composable
+    fun SpawnCard(label: String, type: String, onSelect: (String) -> Unit) {
+        Box(
+            modifier = Modifier
+                .size(100.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.secondaryContainer)
+                .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
+                .pointerInput(Unit) { detectTapGestures { onSelect(type) } },
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSecondaryContainer
+            )
+        }
+    }
+    @Composable
+    fun SpawnScreenOverlay(onDismiss: () -> Unit, onSelect: (String) -> Unit) {
+        // Semi-transparent background that captures clicks to dismiss
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.8f))
+                .pointerInput(Unit) { detectTapGestures { onDismiss() } },
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier
+                    .padding(32.dp)
+                    .pointerInput(Unit) { /* Prevent clicks from passing through cards to background */ }
+            ) {
+                Text(
+                    "Select Element to Spawn",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = Color.White
+                )
+
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    SpawnCard("Button", "button", onSelect)
+                    SpawnCard("Joystick", "joystick", onSelect)
+                    SpawnCard("Slider", "slider", onSelect)
+                }
+
+                Button(
+                    onClick = onDismiss,
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Cancel")
+                }
+            }
+        }
+    }
+    @Composable
+    fun ElementSettingsOverlay(
+        element: InterfaceElementState,
+        onDismiss: () -> Unit,
+        onDelete: () -> Unit,
+        onUpdateLabel: (String) -> Unit,
+        onUpdateCommand: (String) -> Unit
+    ) {
+        var tempLabel by remember { mutableStateOf(element.label) }
+        var tempCommand by remember { mutableStateOf(element.command) }
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.7f))
+                .pointerInput(Unit) { detectTapGestures { onDismiss() } },
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                modifier = Modifier
+                    .width(300.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(MaterialTheme.colorScheme.surface)
+                    .padding(24.dp)
+                    .pointerInput(Unit) { /* Stop click propagation */ },
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text("Element Settings", style = MaterialTheme.typography.headlineSmall)
+
+                Text("Type: ${element.type.uppercase()}", style = MaterialTheme.typography.bodyMedium)
+
+                androidx.compose.material3.OutlinedTextField(
+                    value = tempLabel,
+                    onValueChange = {
+                        tempLabel = it
+                        onUpdateLabel(it)
+                    },
+                    label = { Text("Label") },
+                    singleLine = true
+                )
+                androidx.compose.material3.OutlinedTextField(
+                    value = tempCommand,
+                    onValueChange = {
+                        tempCommand = it
+                        onUpdateCommand(it)
+                    },
+                    label = { Text("Command") },
+                    singleLine = true
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = onDelete,
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Text("Delete")
+                    }
+                    Button(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Close")
+                    }
+                }
+            }
+        }
+    }
+
+    @Composable
     fun DynamicUI(jsonString: String, webSocketInterface: WebSocketManager) {
         val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
 
@@ -563,8 +693,38 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
 
         val elements = sharedState.persistentElements
 
+        var showSpawnScreen by remember { mutableStateOf(false) }
+        var showElementSettings by remember { mutableStateOf(false) }
+        var selectedElement by remember { mutableStateOf<InterfaceElementState?>(null) }
+        var spawnCell by remember { mutableStateOf(Pair(0, 0)) }
+
         GridLayout { gridSize, offset ->
-            Box(modifier = Modifier.fillMaxSize()) {
+            Box(modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(sharedState.isEditMode) {
+                    if (!sharedState.isEditMode) return@pointerInput
+                    detectTapGestures { pressOffset ->
+                        val cellX = (pressOffset.x / gridSize.first.toPx()).toInt()
+                        val cellY = (pressOffset.y / gridSize.second.toPx()).toInt()
+
+                        // Check if an element occupies this cell
+                        val clickedElement = elements.find { el ->
+                            cellX >= el.position[0] && cellX < el.position[0] + el.size[0] &&
+                                    cellY >= el.position[1] && cellY < el.position[1] + el.size[1]
+                        }
+
+                        if (clickedElement != null) {
+                            // CLICKED ON ELEMENT -> Open Settings
+                            selectedElement = clickedElement
+                            showElementSettings = true
+                        } else {
+                            // CLICKED ON EMPTY GRID -> Open Spawn Menu
+                            spawnCell = Pair(cellX, cellY)
+                            showSpawnScreen = true
+                        }
+                    }
+                }
+            ) {
                 elements.forEach { element ->
                     when (element.type) {
                         "button" -> ButtonElement(
@@ -630,6 +790,44 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
                             isEditMode = sharedState.isEditMode
                         )
                     }
+                }
+
+                if (showSpawnScreen) {
+                    SpawnScreenOverlay(
+                        onDismiss = { showSpawnScreen = false },
+                        onSelect = { type ->
+                            val newElement = when(type) {
+                                "button" -> InterfaceElementState("button", "New Button", "btn_${System.currentTimeMillis()}", intArrayOf(spawnCell.first, spawnCell.second), intArrayOf(2, 2))
+                                "joystick" -> InterfaceElementState("joystick", "New Joy", "joy_${System.currentTimeMillis()}", intArrayOf(spawnCell.first, spawnCell.second), intArrayOf(4, 4))
+                                else -> InterfaceElementState("slider", "New Slide", "sld_${System.currentTimeMillis()}", intArrayOf(spawnCell.first, spawnCell.second), intArrayOf(1, 4))
+                            }
+                            elements.add(newElement)
+                            showSpawnScreen = false
+                        }
+                    )
+                }
+
+                if (showElementSettings && selectedElement != null) {
+                    ElementSettingsOverlay(
+                        element = selectedElement!!,
+                        onDismiss = { showElementSettings = false },
+                        onDelete = {
+                            elements.remove(selectedElement)
+                            showElementSettings = false
+                        },
+                        onUpdateLabel = { newLabel ->
+                            val index = elements.indexOf(selectedElement)
+                            if (index != -1) {
+                                elements[index] = elements[index].copy(label = newLabel)
+                            }
+                        },
+                        onUpdateCommand = { newCommand ->
+                            val index = elements.indexOf(selectedElement)
+                            if (index != -1) {
+                                elements[index] = elements[index].copy(command = newCommand)
+                            }
+                        }
+                    )
                 }
             }
         }
