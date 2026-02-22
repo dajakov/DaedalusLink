@@ -207,38 +207,6 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
         )
     }
 
-    data class InterfaceElementState(
-        val type: String,
-        val label: String,
-        val command: String,
-        var position: IntArray,
-        var size: IntArray
-    ) {
-        override fun equals(other: Any?): Boolean {
-            if (this === other) return true
-            if (javaClass != other?.javaClass) return false
-
-            other as InterfaceElementState
-
-            if (type != other.type) return false
-            if (label != other.label) return false
-            if (command != other.command) return false
-            if (!position.contentEquals(other.position)) return false
-            if (!size.contentEquals(other.size)) return false
-
-            return true
-        }
-
-        override fun hashCode(): Int {
-            var result = type.hashCode()
-            result = 31 * result + label.hashCode()
-            result = 31 * result + command.hashCode()
-            result = 31 * result + position.contentHashCode()
-            result = 31 * result + size.contentHashCode()
-            return result
-        }
-    }
-
     @Composable
     fun BoxScope.ResizeHandle(
         gridSize: Pair<Dp, Dp>,
@@ -571,16 +539,13 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
 
     @Composable
     fun DynamicUI(jsonString: String, webSocketInterface: WebSocketManager) {
-        val config = remember { json.decodeFromString<LinkConfig>(jsonString) }
+        val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
 
-        val initialConfig = remember(jsonString) {
-            json.decodeFromString<LinkConfig>(jsonString)
-        }
-
-        val elements = remember {
-            mutableStateListOf<InterfaceElementState>().apply {
-                initialConfig.interfaceData.forEach {
-                    add(
+        LaunchedEffect(jsonString) {
+            if (sharedState.persistentElements.isEmpty() && jsonString.isNotEmpty()) {
+                try {
+                    val config = json.decodeFromString<LinkConfig>(jsonString)
+                    val mapped = config.interfaceData.map {
                         InterfaceElementState(
                             type = it.type,
                             command = it.command,
@@ -588,10 +553,15 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
                             size = it.size.toIntArray(),
                             label = it.label
                         )
-                    )
+                    }
+                    sharedState.persistentElements.addAll(mapped)
+                } catch (e: Exception) {
+                    println("JSON Parsing error: ${e.message}")
                 }
             }
         }
+
+        val elements = sharedState.persistentElements
 
         GridLayout { gridSize, offset ->
             Box(modifier = Modifier.fillMaxSize()) {
@@ -615,7 +585,7 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
                                     elements[index] = elements[index].copy(position = intArrayOf(newX, newY))
                                 }
                             },
-                            isEditMode = true
+                            isEditMode = sharedState.isEditMode
                         )
                         "joystick" -> JoystickElement(
                             element = element,
@@ -637,7 +607,7 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
                                     elements[index] = elements[index].copy(position = intArrayOf(newX, newY))
                                 }
                             },
-                            isEditMode = true
+                            isEditMode = sharedState.isEditMode
                         )
                         "slider" -> SliderElement(
                             element, gridSize, offset,
@@ -657,7 +627,7 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
                                     elements[index] = elements[index].copy(position = intArrayOf(newX, newY))
                                 }
                             },
-                            isEditMode = true
+                            isEditMode = sharedState.isEditMode
                         )
                     }
                 }
@@ -810,15 +780,57 @@ fun SettingsScreen(navController: NavController) {
         navController.navigate("landing")
     }
 
-    Scaffold (
-        Modifier.background(MaterialTheme.colorScheme.primary),
-        topBar = { },
+    Scaffold(
+        modifier = Modifier.background(MaterialTheme.colorScheme.primary),
     ) {
-        // TODO: Implement Settings Screen UI
-        Column(modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)) {
-            Text("Settings Screen Placeholder", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onPrimary)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.primary)
+                .padding(16.dp)
+        ) {
+            Text(
+                text = "Settings",
+                style = MaterialTheme.typography.headlineMedium,
+                color = MaterialTheme.colorScheme.onPrimary
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // EDIT MODE TOGGLE
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.1f))
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
+                    Text(
+                        "Edit Mode",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                    Text(
+                        "Enable moving and resizing elements",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f)
+                    )
+                }
+                androidx.compose.material3.Switch(
+                    checked = sharedState.isEditMode,
+                    onCheckedChange = { sharedState.isEditMode = it },
+                    colors = androidx.compose.material3.SwitchDefaults.colors(
+                        checkedThumbColor = MaterialTheme.colorScheme.primary,
+                        checkedTrackColor = MaterialTheme.colorScheme.onPrimary,
+                        uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant,
+                        uncheckedThumbColor = MaterialTheme.colorScheme.outline,
+                        uncheckedBorderColor = Color.Transparent
+                    )
+                )
+            }
         }
     }
 }

@@ -70,7 +70,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
-import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.serialization.json.Json
 
 val sharedState = SharedState() // Global shared state
@@ -704,7 +703,7 @@ fun AppSettingsScreen(navController: NavController) {
                         .clickable {
                             try {
                                 uriHandler.openUri("https://dajakov.com/projects/daedalusLink/privacy") // Placeholder URL
-                            } catch (e: Exception) {
+                            } catch (_: Exception) {
                                 // Handle error
                             }
                         },
@@ -833,7 +832,7 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
     var configError by remember { mutableStateOf<String?>(null) }
     var showConfigError by remember { mutableStateOf(false) }
 
-    var showLoginDialog by remember { mutableStateOf(false) }
+//    var showLoginDialog by remember { mutableStateOf(false) }
 
     fun updateSteps(step: String, isSameLine: Boolean = false) {
         steps = if (isSameLine && steps.isNotEmpty()) {
@@ -910,7 +909,6 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
         val pingResult = performPing(ipAddress)
         var webSocketResult = false
         var fatalProtocolIncompatibility = false
-        var compatibilityChecked = false
 
         if (pingResult) {
             updateSteps("✅", true)
@@ -940,6 +938,7 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
             updateSteps("Checking protocol compatibility... ")
 
             val firstEvent = withTimeoutOrNull(7000) {
+                @Suppress("SENSELESS_COMPARISON")
                 while (
                     sharedState.serverProtoMajor == null &&
                     sharedState.serverProtoMinor == null
@@ -976,8 +975,9 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
             }
         }
 
-        if (compatibilityChecked && !fatalProtocolIncompatibility) {
-            updateSteps("Waiting for JSON file... ")
+        @Suppress("SENSELESS_COMPARISON")
+        if (!fatalProtocolIncompatibility) {
+            updateSteps("Waiting for LinkConfig... ")
 
             val firstEvent = withTimeoutOrNull(7000) {
                 while (
@@ -1013,7 +1013,7 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
             }
         }
 
-        delay(1000) // Shorter delay to see final status before navigating or showing exit
+        delay(1000) // delay to see final status before navigating or showing exit
 
         if (connectionSuccess) {
             navController.navigate("control") { popUpTo("landing") { inclusive = false } }

@@ -48,16 +48,18 @@ fun GridLayout(content: @Composable (cellSize: Pair<Dp, Dp>, offset: Pair<Dp, Dp
                     )
                 }
         ) {
-            for (row in 0..virtualRows) {
-                for (col in 0..virtualColumns) {
-                    drawCircle(
-                        color = circleColor,
-                        radius = 2.dp.toPx(),
-                        center = Offset(
-                            x = col * cellSize.toPx(),
-                            y = row * cellSize.toPx()
+            if(sharedState.isEditMode) {
+                for (row in 0..virtualRows) {
+                    for (col in 0..virtualColumns) {
+                        drawCircle(
+                            color = circleColor,
+                            radius = 2.dp.toPx(),
+                            center = Offset(
+                                x = col * cellSize.toPx(),
+                                y = row * cellSize.toPx()
+                            )
                         )
-                    )
+                    }
                 }
             }
         }

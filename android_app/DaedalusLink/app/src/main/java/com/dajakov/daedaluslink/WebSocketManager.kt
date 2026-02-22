@@ -3,6 +3,9 @@ package com.dajakov.daedaluslink
 import android.os.Handler
 import android.os.Looper
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.*
@@ -313,16 +316,52 @@ class WebSocketManager(private val analyticsLogger: AnalyticsLogger?) { // Added
     }
 }
 
+data class InterfaceElementState(
+    val type: String,
+    val label: String,
+    val command: String,
+    var position: IntArray,
+    var size: IntArray
+) {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+
+        other as InterfaceElementState
+
+        if (type != other.type) return false
+        if (label != other.label) return false
+        if (command != other.command) return false
+        if (!position.contentEquals(other.position)) return false
+        if (!size.contentEquals(other.size)) return false
+
+        return true
+    }
+
+    override fun hashCode(): Int {
+        var result = type.hashCode()
+        result = 31 * result + label.hashCode()
+        result = 31 * result + command.hashCode()
+        result = 31 * result + position.contentHashCode()
+        result = 31 * result + size.contentHashCode()
+        return result
+    }
+}
+
 class SharedState {
     var isConnected by mutableStateOf(false)
     var receivedMessages by mutableStateOf(emptyList<String>())
     var receivedJsonData by mutableStateOf("")
     var isJsonReceived by mutableStateOf(false)
     var robotName by mutableStateOf("")
-    var packetLossPercentage by mutableStateOf(0f)
+    var packetLossPercentage by mutableFloatStateOf(0f)
 
-    var serverProtoMajor by mutableStateOf(0)
-    var serverProtoMinor by mutableStateOf(0)
+    var serverProtoMajor by mutableIntStateOf(0)
+    var serverProtoMinor by mutableIntStateOf(0)
+
+    var isEditMode by mutableStateOf(false)
+
+    var persistentElements = mutableStateListOf<InterfaceElementState>()
 
     fun clear() {
         isConnected = false
@@ -331,5 +370,6 @@ class SharedState {
         isJsonReceived = false
         robotName = ""
         packetLossPercentage = 0f
+        persistentElements.clear()
     }
 }
