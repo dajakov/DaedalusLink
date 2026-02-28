@@ -331,6 +331,8 @@ class SharedState {
 
     var persistentElements = mutableStateListOf<InterfaceData>()
 
+    var unsavedElementsUpdate = mutableStateOf(false)
+
     fun clear() {
         isConnected = false
         receivedMessages = emptyList()

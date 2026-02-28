@@ -1,5 +1,6 @@
 package com.dajakov.daedaluslink
 
+import android.R
 import android.annotation.SuppressLint
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
@@ -34,6 +35,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -169,6 +172,7 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
             Pair(Color.Red, "Disconnected")
         }
         val backgroundColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f)
+        val hasUnsavedChanges = sharedState.unsavedElementsUpdate.value
 
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -189,6 +193,14 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
                 style = MaterialTheme.typography.bodySmall,
                 maxLines = 1
             )
+            if (hasUnsavedChanges) {
+                Spacer(modifier = Modifier.weight(1f))
+                Text(
+                    text = "⚠️",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(end = 4.dp)
+                )
+            }
         }
     }
 
@@ -277,7 +289,13 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
                     y = offset.second + currentY * cellHeight + 1.dp
                 )
                 .size(currentWidth * cellWidth - 2.dp, currentHeight * cellHeight - 2.dp)
-                .then(if (isEditing) Modifier.border(2.dp, MaterialTheme.colorScheme.onPrimary, RectangleShape) else Modifier)
+                .then(
+                    if (isEditing) Modifier.border(
+                        2.dp,
+                        MaterialTheme.colorScheme.onPrimary,
+                        RectangleShape
+                    ) else Modifier
+                )
                 .pointerInput(gridSize, isEditMode) {
                     if (!isEditMode) return@pointerInput
                     UIElementLogic.run {
@@ -477,18 +495,24 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
                         // Normal Slider Logic
                         detectDragGestures { change, _ ->
                             val isHorizontal = size.width >= size.height
-                            val thumbRadiusVisual = if (isHorizontal) size.height * 0.4f else size.width * 0.4f
+                            val thumbRadiusVisual =
+                                if (isHorizontal) size.height * 0.4f else size.width * 0.4f
                             val newPositionNormalized = if (isHorizontal) {
                                 val trackActualWidth = size.width - 2 * thumbRadiusVisual
                                 if (trackActualWidth <= 0) 0.5f
-                                else (change.position.x - thumbRadiusVisual).div(trackActualWidth).coerceIn(0f, 1f)
+                                else (change.position.x - thumbRadiusVisual).div(trackActualWidth)
+                                    .coerceIn(0f, 1f)
                             } else {
                                 val trackActualHeight = size.height - 2 * thumbRadiusVisual
                                 if (trackActualHeight <= 0) 0.5f
-                                else (1 - (change.position.y - thumbRadiusVisual).div(trackActualHeight)).coerceIn(0f, 1f)
+                                else (1 - (change.position.y - thumbRadiusVisual).div(
+                                    trackActualHeight
+                                )).coerceIn(0f, 1f)
                             }
                             sliderPositionNormalized = newPositionNormalized
-                            val byteValue = (sliderPositionNormalized * 255f - 128f).toInt().coerceIn(-128, 127).toByte()
+                            val byteValue =
+                                (sliderPositionNormalized * 255f - 128f).toInt().coerceIn(-128, 127)
+                                    .toByte()
                             onValueChange(element.command, byteValue)
                             change.consume()
                         }
@@ -531,7 +555,9 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
 
             Text(
                 text = element.label,
-                modifier = Modifier.align(Alignment.TopCenter).padding(2.dp),
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(2.dp),
                 color = labelColor,
                 style = MaterialTheme.typography.bodySmall
             )
@@ -712,33 +738,40 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
     @Composable
     fun DynamicUI(jsonString: String, webSocketInterface: WebSocketManager) {
         val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+        val config = json.decodeFromString<LinkConfig>(jsonString)
+        val elements = sharedState.persistentElements
 
         LaunchedEffect(jsonString) {
-            if (sharedState.persistentElements.isEmpty() && jsonString.isNotEmpty()) {
+            if (elements.isEmpty() && jsonString.isNotEmpty()) {
                 try {
-                    val config = json.decodeFromString<LinkConfig>(jsonString)
-                    val mapped = config.interfaceData.map {
-                        InterfaceData(
-                            type = it.type,
-                            command = it.command,
-                            position = it.position,
-                            size = it.size,
-                            label = it.label
-                        )
-                    }
-                    sharedState.persistentElements.addAll(mapped)
+                    // Ensure this mapping creates objects EXACTLY like the ones in config.interfaceData
+                    val mapped = config.interfaceData.map { it.copy() }
+                    elements.addAll(mapped)
                 } catch (e: Exception) {
                     println("JSON Parsing error: ${e.message}")
                 }
             }
         }
 
-        val elements = sharedState.persistentElements
-
         var showSpawnScreen by remember { mutableStateOf(false) }
         var showElementSettings by remember { mutableStateOf(false) }
         var selectedElement by remember { mutableStateOf<InterfaceData?>(null) }
         var spawnCell by remember { mutableStateOf(Pair(0, 0)) }
+
+        SideEffect {
+            // Convert to regular lists to ensure we aren't comparing Snapshot types
+            val currentList = elements.toList()
+            val configList = config.interfaceData
+
+            // check if sizes differ first
+            if (currentList.size != configList.size) {
+                sharedState.unsavedElementsUpdate.value = true
+            } else {
+                // Compare contents. If they are data classes, this works.
+                // If the order might change, use: currentList.sortedBy { it.command } != configList.sortedBy { it.command }
+                sharedState.unsavedElementsUpdate.value = currentList != configList
+            }
+        }
 
         GridLayout { gridSize, offset ->
             Box(modifier = Modifier
@@ -942,7 +975,7 @@ fun DebugScreen(navController: NavController, debugViewModel: DebugViewModel) {
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
-            Text("Debug Charts", style = MaterialTheme.typography.headlineMedium)
+            Text("Coming soon", style = MaterialTheme.typography.headlineMedium)
             Spacer(modifier = Modifier.height(16.dp))
 
 //            if (debugData.isEmpty()) {
