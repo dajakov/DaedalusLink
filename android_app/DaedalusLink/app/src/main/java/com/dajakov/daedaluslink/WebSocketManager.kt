@@ -316,38 +316,6 @@ class WebSocketManager(private val analyticsLogger: AnalyticsLogger?) { // Added
     }
 }
 
-data class InterfaceElementState(
-    val type: String,
-    val label: String,
-    val command: String,
-    var position: IntArray,
-    var size: IntArray
-) {
-    override fun equals(other: Any?): Boolean {
-        if (this === other) return true
-        if (javaClass != other?.javaClass) return false
-
-        other as InterfaceElementState
-
-        if (type != other.type) return false
-        if (label != other.label) return false
-        if (command != other.command) return false
-        if (!position.contentEquals(other.position)) return false
-        if (!size.contentEquals(other.size)) return false
-
-        return true
-    }
-
-    override fun hashCode(): Int {
-        var result = type.hashCode()
-        result = 31 * result + label.hashCode()
-        result = 31 * result + command.hashCode()
-        result = 31 * result + position.contentHashCode()
-        result = 31 * result + size.contentHashCode()
-        return result
-    }
-}
-
 class SharedState {
     var isConnected by mutableStateOf(false)
     var receivedMessages by mutableStateOf(emptyList<String>())
@@ -361,7 +329,7 @@ class SharedState {
 
     var isEditMode by mutableStateOf(false)
 
-    var persistentElements = mutableStateListOf<InterfaceElementState>()
+    var persistentElements = mutableStateListOf<InterfaceData>()
 
     fun clear() {
         isConnected = false

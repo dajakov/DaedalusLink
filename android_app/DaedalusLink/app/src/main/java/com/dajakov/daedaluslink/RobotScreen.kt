@@ -242,7 +242,7 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
 
     @Composable
     fun ButtonElement(
-        element: InterfaceElementState,
+        element: InterfaceData,
         gridSize: Pair<Dp, Dp>,
         offset: Pair<Dp, Dp>,
         onPress: (String) -> Unit,
@@ -318,7 +318,7 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
 
     @Composable
     fun JoystickElement(
-        element: InterfaceElementState,
+        element: InterfaceData,
         gridSize: Pair<Dp, Dp>,
         offset: Pair<Dp, Dp>,
         onMove: (String, Byte, Byte) -> Unit,
@@ -428,7 +428,7 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
 
     @Composable
     fun SliderElement(
-        element: InterfaceElementState,
+        element: InterfaceData,
         gridSize: Pair<Dp, Dp>,
         offset: Pair<Dp, Dp>,
         onValueChange: (String, Byte) -> Unit,
@@ -550,47 +550,56 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
     }
 
     @Composable
-    fun SpawnCard(label: String, type: String, onSelect: (String) -> Unit) {
-        Box(
-            modifier = Modifier
-                .size(100.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(MaterialTheme.colorScheme.secondaryContainer)
-                .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
-                .pointerInput(Unit) { detectTapGestures { onSelect(type) } },
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSecondaryContainer
+    fun SpawnCard(label: String, type: String, onSelect: (String) -> Unit) {Box(
+        modifier = Modifier
+            .size(100.dp)
+            .clip(RoundedCornerShape(16.dp)) // Slightly rounder for modern look
+            .background(MaterialTheme.colorScheme.surfaceVariant) // Use surfaceVariant for cards
+            .border(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                shape = RoundedCornerShape(16.dp)
             )
-        }
+            .pointerInput(Unit) { detectTapGestures { onSelect(type) } },
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant // Contrast against surfaceVariant
+        )
     }
+    }
+
     @Composable
     fun SpawnScreenOverlay(onDismiss: () -> Unit, onSelect: (String) -> Unit) {
-        // Semi-transparent background that captures clicks to dismiss
+        // Use Scrim-like background using surface color with high transparency
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.8f))
+                .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.85f))
                 .pointerInput(Unit) { detectTapGestures { onDismiss() } },
             contentAlignment = Alignment.Center
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp),
+                verticalArrangement = Arrangement.spacedBy(24.dp),
                 modifier = Modifier
+                    .clip(RoundedCornerShape(28.dp)) // Modern M3 container rounding
+                    .background(MaterialTheme.colorScheme.surface)
                     .padding(32.dp)
-                    .pointerInput(Unit) { /* Prevent clicks from passing through cards to background */ }
+                    .pointerInput(Unit) { /* Prevent clicks from passing through */ }
             ) {
                 Text(
-                    "Select Element to Spawn",
+                    text = "Select Element to Spawn",
                     style = MaterialTheme.typography.headlineSmall,
-                    color = Color.White
+                    color = MaterialTheme.colorScheme.onSurface
                 )
 
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.padding(vertical = 8.dp)
+                ) {
                     SpawnCard("Button", "button", onSelect)
                     SpawnCard("Joystick", "joystick", onSelect)
                     SpawnCard("Slider", "slider", onSelect)
@@ -598,7 +607,12 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
 
                 Button(
                     onClick = onDismiss,
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    modifier = Modifier.fillMaxWidth(0.7f),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError
+                    ),
+                    shape = RectangleShape
                 ) {
                     Text("Cancel")
                 }
@@ -607,7 +621,7 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
     }
     @Composable
     fun ElementSettingsOverlay(
-        element: InterfaceElementState,
+        element: InterfaceData,
         onDismiss: () -> Unit,
         onDelete: () -> Unit,
         onUpdateLabel: (String) -> Unit,
@@ -704,11 +718,11 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
                 try {
                     val config = json.decodeFromString<LinkConfig>(jsonString)
                     val mapped = config.interfaceData.map {
-                        InterfaceElementState(
+                        InterfaceData(
                             type = it.type,
                             command = it.command,
-                            position = it.position.toIntArray(),
-                            size = it.size.toIntArray(),
+                            position = it.position,
+                            size = it.size,
                             label = it.label
                         )
                     }
@@ -723,7 +737,7 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
 
         var showSpawnScreen by remember { mutableStateOf(false) }
         var showElementSettings by remember { mutableStateOf(false) }
-        var selectedElement by remember { mutableStateOf<InterfaceElementState?>(null) }
+        var selectedElement by remember { mutableStateOf<InterfaceData?>(null) }
         var spawnCell by remember { mutableStateOf(Pair(0, 0)) }
 
         GridLayout { gridSize, offset ->
@@ -764,13 +778,13 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
                             onResize = { newW, newH ->
                                 val index = elements.indexOfFirst { it.command == element.command }
                                 if (index != -1) {
-                                    elements[index] = elements[index].copy(size = intArrayOf(newW, newH))
+                                    elements[index] = elements[index].copy(size = listOf(newW, newH))
                                 }
                             },
                             onPositionChange = { newX, newY ->
                                 val index = elements.indexOfFirst { it.command == element.command }
                                 if (index != -1) {
-                                    elements[index] = elements[index].copy(position = intArrayOf(newX, newY))
+                                    elements[index] = elements[index].copy(position = listOf(newX, newY))
                                 }
                             },
                             isEditMode = sharedState.isEditMode,
@@ -790,13 +804,13 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
                                 val index = elements.indexOfFirst { it.command == element.command }
                                 if (index != -1) {
                                     elements[index] =
-                                        elements[index].copy(size = intArrayOf(newW, newH))
+                                        elements[index].copy(size = listOf(newW, newH))
                                 }
                             },
                             onPositionChange = { newX, newY ->
                                 val index = elements.indexOfFirst { it.command == element.command }
                                 if (index != -1) {
-                                    elements[index] = elements[index].copy(position = intArrayOf(newX, newY))
+                                    elements[index] = elements[index].copy(position = listOf(newX, newY))
                                 }
                             },
                             isEditMode = sharedState.isEditMode
@@ -810,13 +824,13 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
                                 val index = elements.indexOfFirst { it.command == element.command }
                                 if (index != -1) {
                                     elements[index] =
-                                        elements[index].copy(size = intArrayOf(newW, newH))
+                                        elements[index].copy(size = listOf(newW, newH))
                                 }
                             },
                             onPositionChange = { newX, newY ->
                                 val index = elements.indexOfFirst { it.command == element.command }
                                 if (index != -1) {
-                                    elements[index] = elements[index].copy(position = intArrayOf(newX, newY))
+                                    elements[index] = elements[index].copy(position = listOf(newX, newY))
                                 }
                             },
                             isEditMode = sharedState.isEditMode
@@ -829,9 +843,9 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
                         onDismiss = { showSpawnScreen = false },
                         onSelect = { type ->
                             val newElement = when(type) {
-                                "button" -> InterfaceElementState("button", "New Button", "btn_${System.currentTimeMillis()}", intArrayOf(spawnCell.first, spawnCell.second), intArrayOf(2, 2))
-                                "joystick" -> InterfaceElementState("joystick", "New Joy", "joy_${System.currentTimeMillis()}", intArrayOf(spawnCell.first, spawnCell.second), intArrayOf(4, 4))
-                                else -> InterfaceElementState("slider", "New Slide", "sld_${System.currentTimeMillis()}", intArrayOf(spawnCell.first, spawnCell.second), intArrayOf(1, 4))
+                                "button" -> InterfaceData("button", "New Button", listOf(spawnCell.first, spawnCell.second), listOf(2, 2), "btn_${System.currentTimeMillis()}")
+                                "joystick" -> InterfaceData("joystick", "New Joy", listOf(spawnCell.first, spawnCell.second), listOf(4, 4), "joy_${System.currentTimeMillis()}")
+                                else -> InterfaceData("slider", "New Slide", listOf(spawnCell.first, spawnCell.second), listOf(1, 4), "sld_${System.currentTimeMillis()}")
                             }
                             elements.add(newElement)
                             showSpawnScreen = false
