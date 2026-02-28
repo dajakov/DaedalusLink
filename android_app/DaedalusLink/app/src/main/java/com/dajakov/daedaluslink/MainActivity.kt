@@ -602,7 +602,6 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppSettingsScreen(navController: NavController) {
-//    var isDarkMode by remember { mutableStateOf(false) } // TODO: Replace with actual theme state
     val uriHandler = LocalUriHandler.current
 
     Scaffold(containerColor = MaterialTheme.colorScheme.primary,

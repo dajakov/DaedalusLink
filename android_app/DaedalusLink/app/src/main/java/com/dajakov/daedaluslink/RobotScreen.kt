@@ -31,6 +31,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -248,7 +249,8 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
         onRelease: (String) -> Unit,
         onResize: (Int, Int) -> Unit,
         onPositionChange: (Int, Int) -> Unit,
-        isEditMode: Boolean
+        isEditMode: Boolean,
+        onOpenSettings: () -> Unit
     ) {
         val (cellWidth, cellHeight) = gridSize
         val currentWidth by rememberUpdatedState(element.size[0])
@@ -261,6 +263,7 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
         val isPressed by interactionSource.collectIsPressedAsState()
 
         LaunchedEffect(isPressed) {
+            // Only execute commands if NOT in edit mode
             if (!isEditMode) {
                 if (isPressed) onPress(element.command)
                 else onRelease(element.command)
@@ -289,14 +292,22 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
                 }
         ) {
             Button(
-                onClick = {},
+                onClick = {
+                    if (isEditMode) {
+                        onOpenSettings() // Trigger settings when clicked in edit mode
+                    }
+                },
                 interactionSource = interactionSource,
                 modifier = Modifier.fillMaxSize(),
                 shape = RectangleShape,
-                colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.surface),
-                enabled = !isEditMode
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    contentColor = MaterialTheme.colorScheme.onSurface
+                ),
+                // Keep enabled so it's not transparent and remains clickable
+                enabled = true
             ) {
-                Text(element.label, color = MaterialTheme.colorScheme.onSurface)
+                Text(element.label)
             }
 
             if (isEditMode) {
@@ -629,9 +640,16 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
                         tempLabel = it
                         onUpdateLabel(it) // Update global state
                     },
-                    label = { Text("Display Label") },
+                    label = { Text("Label", color = MaterialTheme.colorScheme.onPrimary) },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = TextFieldDefaults.colors(
+                        focusedIndicatorColor = MaterialTheme.colorScheme.surfaceVariant,
+                        unfocusedIndicatorColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        focusedContainerColor = MaterialTheme.colorScheme.primary,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.primary,
+                        cursorColor = MaterialTheme.colorScheme.onPrimary
+                    )
                 )
 
                 androidx.compose.material3.OutlinedTextField(
@@ -640,22 +658,38 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
                         tempCommand = it
                         onUpdateCommand(it) // Update global state
                     },
-                    label = { Text("Command ID") },
+                    label = { Text("Command", color = MaterialTheme.colorScheme.onPrimary) },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = TextFieldDefaults.colors(
+                        focusedIndicatorColor = MaterialTheme.colorScheme.surfaceVariant,
+                        unfocusedIndicatorColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        focusedContainerColor = MaterialTheme.colorScheme.primary,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.primary,
+                        cursorColor = MaterialTheme.colorScheme.onPrimary
+                    )
                 )
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
                         onClick = onDelete,
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                        modifier = Modifier.weight(1f)
-                    ) { Text("Delete") }
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(0.dp)
+                            .fillMaxWidth(),
+                        shape = RectangleShape
+                    ) { Text("Delete", color = MaterialTheme.colorScheme.onError) }
 
                     Button(
                         onClick = onDismiss,
-                        modifier = Modifier.weight(1f)
-                    ) { Text("Done") }
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.onPrimary),
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(0.dp)
+                            .fillMaxWidth(),
+                        shape = RectangleShape
+                    ) { Text("Done", color = MaterialTheme.colorScheme.onSecondary) }
                 }
             }
         }
@@ -739,7 +773,11 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
                                     elements[index] = elements[index].copy(position = intArrayOf(newX, newY))
                                 }
                             },
-                            isEditMode = sharedState.isEditMode
+                            isEditMode = sharedState.isEditMode,
+                            onOpenSettings = {
+                                selectedElement = element
+                                showElementSettings = true
+                            }
                         )
                         "joystick" -> JoystickElement(
                             element = element,
