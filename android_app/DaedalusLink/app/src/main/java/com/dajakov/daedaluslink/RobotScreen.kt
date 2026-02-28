@@ -601,9 +601,9 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
         onDelete: () -> Unit,
         onUpdateLabel: (String) -> Unit,
         onUpdateCommand: (String) -> Unit
-    ) {
-        var tempLabel by remember { mutableStateOf(element.label) }
-        var tempCommand by remember { mutableStateOf(element.command) }
+    ) {// Local state for smooth typing
+        var tempLabel by remember(element.command) { mutableStateOf(element.label) }
+        var tempCommand by remember(element.command) { mutableStateOf(element.command) }
 
         Box(
             modifier = Modifier
@@ -614,54 +614,48 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
         ) {
             Column(
                 modifier = Modifier
-                    .width(300.dp)
+                    .width(320.dp)
                     .clip(RoundedCornerShape(16.dp))
                     .background(MaterialTheme.colorScheme.surface)
                     .padding(24.dp)
-                    .pointerInput(Unit) { /* Stop click propagation */ },
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                    .pointerInput(Unit) { /* Stop propagation */ },
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text("Element Settings", style = MaterialTheme.typography.headlineSmall)
-
-                Text("Type: ${element.type.uppercase()}", style = MaterialTheme.typography.bodyMedium)
+                Text("Edit Element", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onSurface)
 
                 androidx.compose.material3.OutlinedTextField(
                     value = tempLabel,
                     onValueChange = {
                         tempLabel = it
-                        onUpdateLabel(it)
+                        onUpdateLabel(it) // Update global state
                     },
-                    label = { Text("Label") },
-                    singleLine = true
+                    label = { Text("Display Label") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
                 )
+
                 androidx.compose.material3.OutlinedTextField(
                     value = tempCommand,
                     onValueChange = {
                         tempCommand = it
-                        onUpdateCommand(it)
+                        onUpdateCommand(it) // Update global state
                     },
-                    label = { Text("Command") },
-                    singleLine = true
+                    label = { Text("Command ID") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
                 )
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
                         onClick = onDelete,
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                    ) {
-                        Text("Delete")
-                    }
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                        modifier = Modifier.weight(1f)
+                    ) { Text("Delete") }
+
                     Button(
                         onClick = onDismiss,
                         modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Close")
-                    }
+                    ) { Text("Done") }
                 }
             }
         }
@@ -812,19 +806,21 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
                         element = selectedElement!!,
                         onDismiss = { showElementSettings = false },
                         onDelete = {
-                            elements.remove(selectedElement)
+                            elements.removeIf { it.command == selectedElement?.command }
                             showElementSettings = false
                         },
                         onUpdateLabel = { newLabel ->
-                            val index = elements.indexOf(selectedElement)
+                            val index = elements.indexOfFirst { it.command == selectedElement?.command }
                             if (index != -1) {
                                 elements[index] = elements[index].copy(label = newLabel)
+                                selectedElement = elements[index]
                             }
                         },
-                        onUpdateCommand = { newCommand ->
-                            val index = elements.indexOf(selectedElement)
+                        onUpdateCommand = { newCmd ->
+                            val index = elements.indexOfFirst { it.command == selectedElement?.command }
                             if (index != -1) {
-                                elements[index] = elements[index].copy(command = newCommand)
+                                elements[index] = elements[index].copy(command = newCmd)
+                                selectedElement = elements[index]
                             }
                         }
                     )
