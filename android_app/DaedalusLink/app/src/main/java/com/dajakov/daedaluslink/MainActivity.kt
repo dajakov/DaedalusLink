@@ -191,7 +191,7 @@ class MainActivity : ComponentActivity() {
                             composable("appSettings") { AppSettingsScreen(navController) }
                             composable("control") { ControlScreen(navController, webSocketManager) }
                             composable("debug") { DebugScreen(navController, debugViewModel) }
-                            composable("settings") { SettingsScreen(navController) }
+                            composable("settings") { SettingsScreen(navController, linkConfigViewModel) }
                             composable("addConnectConfig/{discoveryIndex}") { backStackEntry ->
                                 val discoveryIndex = backStackEntry.arguments?.getString("discoveryIndex")
                                     ?.toIntOrNull() ?: 0
@@ -759,13 +759,14 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
 
     fun validateConfig(json: String): Pair<Boolean, String> {
         return try {
-            val parsed = Json.decodeFromString<LinkConfig>(json)
+            sharedState.activeConfig.value = Json.decodeFromString<LinkConfig>(sharedState.receivedJsonData)
+            val parsed = sharedState.activeConfig.value
 
-            if (parsed.interfaceData.isEmpty()) {
+            if (parsed?.interfaceData?.isEmpty() == true) {
                 return false to "interfaceData requires at least 1 control item"
             }
 
-            parsed.interfaceData.forEachIndexed { index, item ->
+            parsed?.interfaceData?.forEachIndexed { index, item ->
                 if (item.command.isEmpty()) {
                     return false to "interfaceData[$index] has empty 'command'"
                 }
@@ -1015,6 +1016,13 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
         delay(1000) // delay to see final status before navigating or showing exit
 
         if (connectionSuccess) {
+            val config = sharedState.activeConfig.value
+            val elements = sharedState.persistentElements
+
+            val mapped = config?.interfaceData?.map { it.copy() }.orEmpty()
+            elements.clear() // Clear existing to avoid duplicates
+            elements.addAll(mapped)
+
             navController.navigate("control") { popUpTo("landing") { inclusive = false } }
         } else {
             // Ensure exit button is shown if any step failed and connectionSuccess is false

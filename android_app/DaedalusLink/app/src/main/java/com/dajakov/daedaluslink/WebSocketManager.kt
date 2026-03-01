@@ -333,6 +333,10 @@ class SharedState {
 
     var unsavedElementsUpdate = mutableStateOf(false)
 
+    var activeConfig = mutableStateOf<LinkConfig?>(null)
+
+    var currentElements = mutableStateListOf<InterfaceData>()
+
     fun clear() {
         isConnected = false
         receivedMessages = emptyList()
@@ -341,5 +345,6 @@ class SharedState {
         robotName = ""
         packetLossPercentage = 0f
         persistentElements.clear()
+        unsavedElementsUpdate.value = false
     }
 }

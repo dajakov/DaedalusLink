@@ -3,6 +3,7 @@ package com.dajakov.daedaluslink
 import android.R
 import android.annotation.SuppressLint
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.copy
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -27,8 +28,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -61,6 +65,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.times
 import androidx.compose.ui.zIndex
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import kotlin.math.roundToInt
 
@@ -156,9 +161,9 @@ object UIElementLogic {
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager) { // Added webSocketMngr parameter
+fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager) {
     BackHandler {
-        webSocketMngr.disconnect() // Use passed webSocketMngr
+        webSocketMngr.disconnect()
         navController.navigate("landing")
     }
 
@@ -736,39 +741,22 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
     }
 
     @Composable
-    fun DynamicUI(jsonString: String, webSocketInterface: WebSocketManager) {
-        val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
-        val config = json.decodeFromString<LinkConfig>(jsonString)
+    fun DynamicUI(webSocketInterface: WebSocketManager) {
+        val config = sharedState.activeConfig.value
         val elements = sharedState.persistentElements
-
-        LaunchedEffect(jsonString) {
-            if (elements.isEmpty() && jsonString.isNotEmpty()) {
-                try {
-                    // Ensure this mapping creates objects EXACTLY like the ones in config.interfaceData
-                    val mapped = config.interfaceData.map { it.copy() }
-                    elements.addAll(mapped)
-                } catch (e: Exception) {
-                    println("JSON Parsing error: ${e.message}")
-                }
-            }
-        }
 
         var showSpawnScreen by remember { mutableStateOf(false) }
         var showElementSettings by remember { mutableStateOf(false) }
         var selectedElement by remember { mutableStateOf<InterfaceData?>(null) }
         var spawnCell by remember { mutableStateOf(Pair(0, 0)) }
 
-        SideEffect {
-            // Convert to regular lists to ensure we aren't comparing Snapshot types
+        LaunchedEffect(elements.toList(), config?.interfaceData) {
             val currentList = elements.toList()
-            val configList = config.interfaceData
+            val configList = config?.interfaceData ?: emptyList()
 
-            // check if sizes differ first
             if (currentList.size != configList.size) {
                 sharedState.unsavedElementsUpdate.value = true
             } else {
-                // Compare contents. If they are data classes, this works.
-                // If the order might change, use: currentList.sortedBy { it.command } != configList.sortedBy { it.command }
                 sharedState.unsavedElementsUpdate.value = currentList != configList
             }
         }
@@ -950,7 +938,7 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
             contentAlignment = Alignment.Center
         ) {
             if (receivedJsonData.isNotEmpty()) {
-                DynamicUI(receivedJsonData, webSocketMngr) // Pass webSocketMngr to DynamicUI
+                DynamicUI(webSocketMngr) // Pass webSocketMngr to DynamicUI
             } else {
                 Text("No JSON file received!")
             }
@@ -1054,7 +1042,11 @@ fun DebugScreen(navController: NavController, debugViewModel: DebugViewModel) {
 
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @Composable
-fun SettingsScreen(navController: NavController) {
+fun SettingsScreen(navController: NavController,
+                   linkConfigViewModel: LinkConfigViewModel
+) {
+    val hasChanges = sharedState.unsavedElementsUpdate.value
+
     BackHandler {
         navController.navigate("landing")
     }
@@ -1109,6 +1101,42 @@ fun SettingsScreen(navController: NavController) {
                         uncheckedBorderColor = Color.Transparent
                     )
                 )
+
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Button(
+                onClick = {
+                    val latestConfig = sharedState.activeConfig.value
+                    val currentElements = sharedState.persistentElements.toList()
+
+                    if (latestConfig != null) {
+                        val updatedConfig = latestConfig.copy(
+                            interfaceData = currentElements
+                        )
+
+                        linkConfigViewModel.insertLinkConfig(updatedConfig)
+
+                        sharedState.activeConfig.value = updatedConfig
+
+                        sharedState.unsavedElementsUpdate.value = false
+                    } else {
+                        println("Debug: Cannot save because activeConfig is null")
+                    }
+                },
+                enabled = sharedState.unsavedElementsUpdate.value,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (hasChanges) MaterialTheme.colorScheme.secondary
+                    else MaterialTheme.colorScheme.surfaceVariant,
+                    contentColor = if (hasChanges) MaterialTheme.colorScheme.onSecondary
+                    else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            ) {
+                Icon(Icons.Default.Check, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Save Changes")
             }
         }
     }
