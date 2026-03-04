@@ -29,7 +29,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -1073,7 +1075,7 @@ fun SettingsScreen(navController: NavController,
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.1f))
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.2f))
                     .padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -1106,37 +1108,95 @@ fun SettingsScreen(navController: NavController,
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            Button(
-                onClick = {
-                    val latestConfig = sharedState.activeConfig.value
-                    val currentElements = sharedState.persistentElements.toList()
-
-                    if (latestConfig != null) {
-                        val updatedConfig = latestConfig.copy(
-                            interfaceData = currentElements
-                        )
-
-                        linkConfigViewModel.insertLinkConfig(updatedConfig)
-
-                        sharedState.activeConfig.value = updatedConfig
-
-                        sharedState.unsavedElementsUpdate.value = false
-                    } else {
-                        println("Debug: Cannot save because activeConfig is null")
-                    }
-                },
-                enabled = sharedState.unsavedElementsUpdate.value,
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (hasChanges) MaterialTheme.colorScheme.secondary
-                    else MaterialTheme.colorScheme.surfaceVariant,
-                    contentColor = if (hasChanges) MaterialTheme.colorScheme.onSecondary
-                    else MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            Column (
+                modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.2f))
+                .padding(16.dp)
             ) {
-                Icon(Icons.Default.Check, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text("Save Changes")
+                Text(
+                    text = "Local Storage",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onPrimary
+                )
+
+                Text(
+                    text = if (hasChanges) "You have unsaved LinkConfig changes. Save them locally for this robot."
+                    else "LinkConfig is up to date.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (hasChanges) MaterialTheme.colorScheme.secondary
+                    else MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.5f),
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
+
+                Button(
+                    onClick = {
+                        val latestConfig = sharedState.activeConfig.value
+                        val currentElements = sharedState.persistentElements.toList()
+
+                        if (latestConfig != null) {
+                            val updatedConfig = latestConfig.copy(interfaceData = currentElements)
+                            linkConfigViewModel.insertLinkConfig(updatedConfig)
+                            sharedState.activeConfig.value = updatedConfig
+                            sharedState.unsavedElementsUpdate.value = false
+                        }
+                    },
+                    enabled = hasChanges,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (hasChanges) MaterialTheme.colorScheme.secondary
+                        else MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = if (hasChanges) MaterialTheme.colorScheme.onSecondary
+                        else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                ) {
+                    Icon(Icons.Default.Check, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Save Changes")
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.2f))
+                    .padding(16.dp)
+            ) {
+                Text(
+                    text = "Upload to server",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onPrimary
+                )
+                Text(
+                    text = "Upload your local layout configuration to the robot's server so other devices can see it.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f),
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
+                Button(
+                    onClick = {
+                        val currentConfig = sharedState.activeConfig.value
+                        if (currentConfig != null) {
+                            // webSocketMngr.sendConfigUpdate(currentConfig)
+                            println("Debug: Uploading config to server...")
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.tertiary,
+                        contentColor = MaterialTheme.colorScheme.onTertiary
+                    )
+                ) {
+                    Icon(imageVector = Icons.AutoMirrored.Filled.Send, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Upload to Robot")
+                }
             }
         }
     }
