@@ -36,6 +36,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextFieldDefaults
@@ -1047,7 +1048,12 @@ fun DebugScreen(navController: NavController, debugViewModel: DebugViewModel) {
 fun SettingsScreen(navController: NavController,
                    linkConfigViewModel: LinkConfigViewModel
 ) {
+    val activeConfig = sharedState.activeConfig.value
+    var linkName by remember(activeConfig) { mutableStateOf(activeConfig?.name ?: "") }
+    var linkId by remember(activeConfig) { mutableStateOf(activeConfig?.linkId?.toString() ?: "") }
+
     val hasChanges = sharedState.unsavedElementsUpdate.value
+    val scrollState = rememberScrollState()
 
     BackHandler {
         navController.navigate("landing")
@@ -1060,6 +1066,7 @@ fun SettingsScreen(navController: NavController,
             modifier = Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.primary)
+                .verticalScroll(scrollState)
                 .padding(16.dp)
         ) {
             Text(
@@ -1105,9 +1112,66 @@ fun SettingsScreen(navController: NavController,
                 )
 
             }
+            
+            Spacer(modifier = Modifier.height(16.dp))
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.2f))
+                    .padding(16.dp)
+            ) {
+                Text(
+                    text = "Configuration Details",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onPrimary
+                )
+                Spacer(modifier = Modifier.height(12.dp))
 
+                OutlinedTextField(
+                    value = linkName,
+                    onValueChange = {
+                        linkName = it
+                        sharedState.unsavedElementsUpdate.value = true
+                    },
+                    label = { Text("Link Name") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        focusedLabelColor = MaterialTheme.colorScheme.secondary,
+                        unfocusedLabelColor = Color.White.copy(alpha = 0.7f),
+                        focusedBorderColor = MaterialTheme.colorScheme.secondary,
+                        unfocusedBorderColor = Color.White.copy(alpha = 0.5f)
+                    )
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                OutlinedTextField(
+                    value = linkId,
+                    onValueChange = {
+                        linkId = it
+                        sharedState.unsavedElementsUpdate.value = true
+                    },
+                    label = { Text("Link ID") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        focusedLabelColor = MaterialTheme.colorScheme.secondary,
+                        unfocusedLabelColor = Color.White.copy(alpha = 0.7f),
+                        focusedBorderColor = MaterialTheme.colorScheme.secondary,
+                        unfocusedBorderColor = Color.White.copy(alpha = 0.5f)
+                    )
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            
             Column (
                 modifier = Modifier
                 .fillMaxWidth()
@@ -1136,7 +1200,11 @@ fun SettingsScreen(navController: NavController,
                         val currentElements = sharedState.persistentElements.toList()
 
                         if (latestConfig != null) {
-                            val updatedConfig = latestConfig.copy(interfaceData = currentElements)
+                            val updatedConfig = latestConfig.copy(
+                                name = linkName,
+                                linkId = linkId.toIntOrNull() ?: latestConfig.linkId,
+                                interfaceData = currentElements
+                            )
                             linkConfigViewModel.insertLinkConfig(updatedConfig)
                             sharedState.activeConfig.value = updatedConfig
                             sharedState.unsavedElementsUpdate.value = false
