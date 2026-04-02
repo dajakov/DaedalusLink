@@ -60,6 +60,9 @@ import kotlinx.coroutines.withContext
 import java.io.IOException
 import java.net.InetAddress
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -322,14 +325,30 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
             listOf("Settings")
     val configIDs = connectConfigs.map { it.id}
 
+    val discoveredRobots by discoveryViewModel.robots.collectAsState()
+
+
+// Animation: define the target color and thickness based on whether list is empty
+    val hasRobots = discoveredRobots.isNotEmpty()
+    val animatedBorderColor by animateColorAsState(
+        targetValue = if (hasRobots) Color.Green else MaterialTheme.colorScheme.onPrimary,
+        animationSpec = tween(durationMillis = 500),
+        label = "BorderColorAnimation"
+    )
+    val animatedBorderWidth by animateDpAsState(
+        targetValue = if (hasRobots) 2.dp else 1.dp,
+        animationSpec = tween(durationMillis = 500),
+        label = "BorderWidthAnimation"
+    )
+
+    var mExpanded by remember { mutableStateOf(false) }
+
     @Composable
     fun RobotDropdown(
         mExpanded: Boolean,
         onDismiss: () -> Unit,
         onSelect: (index: Int) -> Unit
     ) {
-        val discoveredRobots by discoveryViewModel.robots.collectAsState()
-
         DropdownMenu(
             expanded = mExpanded,
             onDismissRequest = onDismiss,
@@ -367,7 +386,10 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
         .background(MaterialTheme.colorScheme.primary)
         // Apply system bar padding to the content of LandingScreen,
         // so it doesn't draw under the status bar (already colored) or nav bar
-        .padding(WindowInsets.systemBars.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom).asPaddingValues())
+        .padding(
+            WindowInsets.systemBars.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom)
+                .asPaddingValues()
+        )
         ) {
         Box(
             modifier = Modifier
@@ -441,19 +463,31 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .border(1.dp, MaterialTheme.colorScheme.onPrimary, RoundedCornerShape(8.dp))
+                                // USE ANIMATED VALUES HERE
+                                .border(
+                                    width = animatedBorderWidth,
+                                    color = animatedBorderColor,
+                                    shape = RoundedCornerShape(8.dp)
+                                )
                                 .clickable { mExpanded = true }
                                 .padding(16.dp)
                         ) {
-                            Text(
-                                text = "Select Robot",
-                                color = MaterialTheme.colorScheme.onPrimary
-                            )
+                            if (discoveredRobots.isEmpty()) {
+                                Text(
+                                    text = "no Robots found",
+                                    color = MaterialTheme.colorScheme.onPrimary
+                                )
+                            } else {
+                                Text(
+                                    text = "${discoveredRobots.size} Robots found",
+                                    color = MaterialTheme.colorScheme.onPrimary
+                                )
+                            }
                             Icon(
                                 imageVector = if (mExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
                                 contentDescription = "Dropdown icon",
-                                modifier = Modifier.align(Alignment.CenterEnd),
-                                tint = MaterialTheme.colorScheme.onPrimary
+                                modifier = Modifier.align(Alignment.CenterEnd), // Ensure alignment is set
+                                tint = animatedBorderColor // Optional: make the icon match the border
                             )
                         }
 
@@ -497,7 +531,11 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .border(1.dp, MaterialTheme.colorScheme.onPrimary, RoundedCornerShape(8.dp))
+                            .border(
+                                1.dp,
+                                MaterialTheme.colorScheme.onPrimary,
+                                RoundedCornerShape(8.dp)
+                            )
                             .clickable { mExpanded = !mExpanded }
                             .padding(16.dp)
                     ) {
@@ -509,14 +547,18 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
                         Icon(
                             imageVector = iconDropdown,
                             contentDescription = "Dropdown icon",
-                            modifier = Modifier.align(Alignment.CenterEnd).padding(5.dp),
+                            modifier = Modifier
+                                .align(Alignment.CenterEnd)
+                                .padding(5.dp),
                             tint = MaterialTheme.colorScheme.onPrimary
                         )
                     }
                     DropdownMenu(
                         expanded = mExpanded,
                         onDismissRequest = { mExpanded = false },
-                        modifier = Modifier.width(200.dp).padding(top = 8.dp)
+                        modifier = Modifier
+                            .width(200.dp)
+                            .padding(top = 8.dp)
                     ) {
                         configNames.forEachIndexed { index, name ->
                             DropdownMenuItem(
@@ -757,7 +799,7 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
                   debugViewModel: DebugViewModel, webSocketMngr: WebSocketManager) {
     BackHandler { }
 
-    fun validateConfig(json: String): Pair<Boolean, String> {
+    fun validateConfig(): Pair<Boolean, String> {
         return try {
             sharedState.activeConfig.value = Json.decodeFromString<LinkConfig>(sharedState.receivedJsonData)
             val parsed = sharedState.activeConfig.value
@@ -974,32 +1016,26 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
                 updateSteps("⚠ App is outdated")
             }
         }
+        if(linkIndexArgument == -1) {
+            if (!fatalProtocolIncompatibility) {
+                updateSteps("Waiting for LinkConfig... ")
 
-        @Suppress("SENSELESS_COMPARISON")
-        if (!fatalProtocolIncompatibility) {
-            updateSteps("Waiting for LinkConfig... ")
-
-            val firstEvent = withTimeoutOrNull(7000) {
-                while (
-                    !sharedState.isJsonReceived
-                ) {
-                    delay(200)
+                val firstEvent = withTimeoutOrNull(7000) {
+                    while (
+                        !sharedState.isJsonReceived
+                    ) {
+                        delay(200)
+                    }
+                    true
                 }
-                true
-            }
-            if (firstEvent == null) {
-                updateSteps("❌ Timed out", true)
-                connectionSuccess = false
-                showExitButton = true
-                return@LaunchedEffect
-            }
-
-            if (sharedState.isJsonReceived) {
-                val json = sharedState.receivedJsonData
-                @Suppress("SENSELESS_COMPARISON") // I'm sure this is not senseless!
-                if (json != null) {
-                    val (valid, errorMsg) = validateConfig(json)
-
+                if (firstEvent == null) {
+                    updateSteps("❌ Timed out", true)
+                    connectionSuccess = false
+                    showExitButton = true
+                    return@LaunchedEffect
+                }
+                if (sharedState.isJsonReceived) {
+                    val (valid, errorMsg) = validateConfig()
                     if (valid) {
                         updateSteps("✅", true)
                     } else {
@@ -1011,6 +1047,9 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
                     }
                 }
             }
+        }
+        else{
+            sharedState.activeConfig.value = linkConfigViewModel.getLinkConfigById(linkIndexArgument)
         }
 
         delay(1000) // delay to see final status before navigating or showing exit

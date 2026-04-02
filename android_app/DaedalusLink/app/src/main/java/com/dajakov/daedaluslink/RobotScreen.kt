@@ -170,8 +170,6 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
         navController.navigate("landing")
     }
 
-    val receivedJsonData = sharedState.receivedJsonData
-
     @Composable
     fun ConnectionStatusIndicator(isConnected: Boolean, modifier: Modifier = Modifier) {
         val (indicatorColor, statusText) = if (isConnected) {
@@ -940,11 +938,7 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
                 .fillMaxWidth(),
             contentAlignment = Alignment.Center
         ) {
-            if (receivedJsonData.isNotEmpty()) {
-                DynamicUI(webSocketMngr) // Pass webSocketMngr to DynamicUI
-            } else {
-                Text("No JSON file received!")
-            }
+            DynamicUI(webSocketMngr) // Pass webSocketMngr to DynamicUI
         }
     }
 }
