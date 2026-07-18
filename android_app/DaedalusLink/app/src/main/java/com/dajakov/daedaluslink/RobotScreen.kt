@@ -1,9 +1,7 @@
 package com.dajakov.daedaluslink
 
-import android.R
 import android.annotation.SuppressLint
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.core.copy
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -31,7 +29,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -42,11 +39,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.MutableState
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -57,7 +51,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.input.pointer.PointerInputScope
@@ -67,24 +60,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.times
-import androidx.compose.ui.zIndex
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import kotlin.math.roundToInt
-
-//import co.yml.charts.axis.AxisData
-//import co.yml.charts.common.extensions.formatToSinglePrecision
-//import co.yml.charts.common.model.Point
-//import co.yml.charts.ui.linechart.LineChart
-//import co.yml.charts.ui.linechart.model.GridLines
-//import co.yml.charts.ui.linechart.model.IntersectionPoint
-//import co.yml.charts.ui.linechart.model.Line
-//import co.yml.charts.ui.linechart.model.LineChartData
-//import co.yml.charts.ui.linechart.model.LinePlotData
-//import co.yml.charts.ui.linechart.model.LineStyle
-//import co.yml.charts.ui.linechart.model.SelectionHighlightPoint
-//import co.yml.charts.ui.linechart.model.SelectionHighlightPopUp
-//import co.yml.charts.ui.linechart.model.ShadowUnderLine
 
 object UIElementLogic {
     suspend fun PointerInputScope.handleMoveDrag(
@@ -680,7 +656,7 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
             ) {
                 Text("Edit Element", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onSurface)
 
-                androidx.compose.material3.OutlinedTextField(
+                OutlinedTextField(
                     value = tempLabel,
                     onValueChange = {
                         tempLabel = it
@@ -698,7 +674,7 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
                     )
                 )
 
-                androidx.compose.material3.OutlinedTextField(
+                OutlinedTextField(
                     value = tempCommand,
                     onValueChange = {
                         tempCommand = it
@@ -945,7 +921,8 @@ fun ControlScreen(navController: NavController, webSocketMngr: WebSocketManager)
 
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @Composable
-fun DebugScreen(navController: NavController, debugViewModel: DebugViewModel) {
+//fun DebugScreen(navController: NavController, debugViewModel: DebugViewModel) {
+fun DebugScreen(navController: NavController) {
 //    val debugData = debugViewModel.debugData
 
     BackHandler {

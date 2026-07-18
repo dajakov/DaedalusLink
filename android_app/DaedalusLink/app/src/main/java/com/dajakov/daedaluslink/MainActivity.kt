@@ -1,7 +1,6 @@
 package com.dajakov.daedaluslink
 
 import android.annotation.SuppressLint
-import android.graphics.Color as AndroidColor
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -35,20 +34,17 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.view.WindowCompat
 import androidx.navigation.NavController
 import androidx.navigation.compose.*
 import androidx.compose.material3.TextFieldDefaults
@@ -74,6 +70,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import kotlinx.serialization.json.Json
+import kotlin.time.Duration.Companion.milliseconds
 
 val sharedState = SharedState() // Global shared state
 
@@ -84,7 +81,7 @@ class MainActivity : ComponentActivity() {
 
     private val discoveryViewModel: DiscoveryViewModel by viewModels()
 
-    private lateinit var analyticsLogger: AnalyticsLogger
+//    private lateinit var analyticsLogger: AnalyticsLogger
     private lateinit var webSocketManager: WebSocketManager
 
     @SuppressLint("UnusedMaterialScaffoldPaddingParameter",
@@ -93,36 +90,13 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        analyticsLogger = getAnalyticsProvider(applicationContext).getLogger()!!
-        webSocketManager = WebSocketManager(analyticsLogger)
-
-//        resetDatabase(applicationContext) //TODO(remove for production) for development purposes only.
+//        analyticsLogger = getAnalyticsProvider(applicationContext).getLogger()!!
+        webSocketManager = WebSocketManager()
 
         actionBar?.hide()
 
         setContent {
             DaedalusLinkTheme {
-                // Control status bar appearance
-                val view = LocalView.current
-                val primaryColor = MaterialTheme.colorScheme.primary
-                // Determine if the primary color is "dark".
-                // A simple heuristic: if luminance is < 0.5, it's dark.
-                // Adjust this threshold if needed for your specific color scheme.
-                val isPrimaryColorDark = primaryColor.toArgb().let { color ->
-                    // Extract RGB components
-                    val red = android.graphics.Color.red(color)
-                    val green = android.graphics.Color.green(color)
-                    val blue = android.graphics.Color.blue(color)
-                    // Calculate luminance (simplified formula)
-                    (0.299 * red + 0.587 * green + 0.114 * blue) / 255 < 0.5
-                }
-
-                SideEffect {
-                    val window = this.window
-                    window.statusBarColor = AndroidColor.TRANSPARENT  // deprecated, but fixes contrast issue on api versions <35
-                    WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !isPrimaryColorDark
-                }
-
                 val navController = rememberNavController()
 
                 val currentDestination by navController.currentBackStackEntryAsState()
@@ -193,7 +167,7 @@ class MainActivity : ComponentActivity() {
                             }
                             composable("appSettings") { AppSettingsScreen(navController) }
                             composable("control") { ControlScreen(navController, webSocketManager) }
-                            composable("debug") { DebugScreen(navController, debugViewModel) }
+                            composable("debug") { DebugScreen(navController) }
                             composable("settings") { SettingsScreen(navController, linkConfigViewModel) }
                             composable("addConnectConfig/{discoveryIndex}") { backStackEntry ->
                                 val discoveryIndex = backStackEntry.arguments?.getString("discoveryIndex")
@@ -314,6 +288,7 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
     val scrollState = rememberScrollState()
 
     val connectConfigs by connectConfigViewModel.allConfigs.collectAsState(initial = emptyList())
+    val linkConfigs by linkConfigViewModel.allConfigs.collectAsState(initial = emptyList())
     val dynamicIcons = connectConfigs.map { config ->
         IconMapper.getIconById(config.iconId)
     }
@@ -328,7 +303,6 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
     val discoveredRobots by discoveryViewModel.robots.collectAsState()
 
 
-// Animation: define the target color and thickness based on whether list is empty
     val hasRobots = discoveredRobots.isNotEmpty()
     val animatedBorderColor by animateColorAsState(
         targetValue = if (hasRobots) Color.Green else MaterialTheme.colorScheme.onPrimary,
@@ -340,8 +314,6 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
         animationSpec = tween(durationMillis = 500),
         label = "BorderWidthAnimation"
     )
-
-    var mExpanded by remember { mutableStateOf(false) }
 
     @Composable
     fun RobotDropdown(
@@ -522,7 +494,6 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
             }
             else -> {
                 var mExpanded by remember { mutableStateOf(false) }
-                val linkConfigs by linkConfigViewModel.allConfigs.collectAsState(initial = emptyList())
                 val configNames = linkConfigs.map { it.name } + "Auto-Pull from Robot"
                 val iconDropdown = if (mExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown
 
@@ -557,8 +528,9 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
                         expanded = mExpanded,
                         onDismissRequest = { mExpanded = false },
                         modifier = Modifier
-                            .width(200.dp)
-                            .padding(top = 8.dp)
+                            .width(screenWidth - 30.dp)
+                            .background(MaterialTheme.colorScheme.onSurfaceVariant)
+                            .border(1.dp, MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
                     ) {
                         configNames.forEachIndexed { index, name ->
                             DropdownMenuItem(
@@ -591,7 +563,8 @@ fun LandingScreen(navController: NavController, connectConfigViewModel: ConnectC
                     baseModifier.clickable {
                         val actualConfigId = configIDs.getOrNull(selectedIndex.intValue - 1)
                         if (actualConfigId != null) {
-                           navController.navigate("loading/$actualConfigId/$linkIndex")
+                           val selectedLinkId = if (linkIndex == -1) -1 else linkConfigs.getOrNull(linkIndex)?.linkId ?: -1
+                           navController.navigate("loading/$actualConfigId/$selectedLinkId")
                         } else {
                              println("Error: No valid robot configuration selected for connection from canvas click.")
                         }
@@ -649,6 +622,7 @@ fun AppSettingsScreen(navController: NavController) {
     Scaffold(containerColor = MaterialTheme.colorScheme.primary,
         topBar = {
             TopAppBar(
+                windowInsets = WindowInsets(0, 0, 0, 0),
                 title = { Text("App Settings") },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
@@ -979,13 +953,13 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
         if (webSocketResult) {
             updateSteps("Checking protocol compatibility... ")
 
-            val firstEvent = withTimeoutOrNull(7000) {
+            val firstEvent = withTimeoutOrNull(7000.milliseconds) {
                 @Suppress("SENSELESS_COMPARISON")
                 while (
                     sharedState.serverProtoMajor == null &&
                     sharedState.serverProtoMinor == null
                 ) {
-                    delay(200)
+                    delay(200.milliseconds)
                 }
                 true
             }
@@ -1020,11 +994,11 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
             if (!fatalProtocolIncompatibility) {
                 updateSteps("Waiting for LinkConfig... ")
 
-                val firstEvent = withTimeoutOrNull(7000) {
+                val firstEvent = withTimeoutOrNull(7000.milliseconds) {
                     while (
                         !sharedState.isJsonReceived
                     ) {
-                        delay(200)
+                        delay(200.milliseconds)
                     }
                     true
                 }
@@ -1052,7 +1026,7 @@ fun LoadingScreen(navController: NavController, connectConfigViewModel: ConnectC
             sharedState.activeConfig.value = linkConfigViewModel.getLinkConfigById(linkIndexArgument)
         }
 
-        delay(1000) // delay to see final status before navigating or showing exit
+        delay(1000.milliseconds) // delay to see final status before navigating or showing exit
 
         if (connectionSuccess) {
             val config = sharedState.activeConfig.value
@@ -1146,6 +1120,7 @@ fun AddConnectConfigScreen(navController: NavController, connectConfigViewModel:
     Scaffold(containerColor = MaterialTheme.colorScheme.primary,
         topBar = {
             TopAppBar(
+                windowInsets = WindowInsets(0, 0, 0, 0),
                 title = { Text("Add Connect Config") },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
@@ -1206,7 +1181,6 @@ fun AddConnectConfigScreen(navController: NavController, connectConfigViewModel:
             }
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Connection type selection (Radio buttons for WiFi and Bluetooth)
             Text("Select Connection Type:", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 RadioButton(

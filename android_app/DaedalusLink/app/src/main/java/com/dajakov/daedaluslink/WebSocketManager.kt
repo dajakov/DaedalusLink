@@ -15,8 +15,10 @@ import org.json.JSONObject
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.pow
+import kotlin.time.Duration.Companion.milliseconds
 
-class WebSocketManager(private val analyticsLogger: AnalyticsLogger?) { // Added analyticsLogger to constructor
+//class WebSocketManager(private val analyticsLogger: AnalyticsLogger?) { // Added analyticsLogger to constructor
+class WebSocketManager {
     private val client: OkHttpClient = OkHttpClient()
     private var webSocket: WebSocket? = null
     private var resendDelay: Long = 1000L
@@ -146,7 +148,7 @@ class WebSocketManager(private val analyticsLogger: AnalyticsLogger?) { // Added
             }
         })
 
-        return withTimeoutOrNull(10000) { connectionResult.await() } ?: false
+        return withTimeoutOrNull(10000.milliseconds) { connectionResult.await() } ?: false
     }
 
     private fun reconnectWebSocket() {
@@ -182,8 +184,8 @@ class WebSocketManager(private val analyticsLogger: AnalyticsLogger?) { // Added
             return
         }
         if (sent < PACKET_LOSS_WINDOW_SIZE / 2 && receivedAcks == 0) {
-             if(sent > 0) currentSharedState?.packetLossPercentage = (((sent - receivedAcks).toFloat() / sent.toFloat()) * 100).coerceIn(0f,100f)
-             else currentSharedState?.packetLossPercentage = 0f
+            if(sent > 0) currentSharedState?.packetLossPercentage = (((sent - receivedAcks).toFloat() / sent.toFloat()) * 100).coerceIn(0f,100f)
+            else currentSharedState?.packetLossPercentage = 0f
             return
         }
 
@@ -211,7 +213,7 @@ class WebSocketManager(private val analyticsLogger: AnalyticsLogger?) { // Added
 
     fun disconnect() {
         println("Client initiated disconnect.")
-        val previouslyConnected = currentSharedState?.isConnected == true
+//        val previouslyConnected = currentSharedState?.isConnected == true
         resendJob?.cancel()
         webSocket?.close(1000, "Client disconnected")
         webSocket = null
@@ -259,7 +261,7 @@ class WebSocketManager(private val analyticsLogger: AnalyticsLogger?) { // Added
         resendJob?.cancel()
         resendJob = CoroutineScope(Dispatchers.IO).launch {
             while (isActive && sharedState.isConnected) {
-                delay(resendDelay)
+                delay(resendDelay.milliseconds)
                 val currentTime = System.currentTimeMillis()
                 if (sharedState.isConnected && lastCommand != null && (currentTime - lastCommandTimestamp > resendDelay)) {
                     sendCommand("ack")
@@ -270,48 +272,58 @@ class WebSocketManager(private val analyticsLogger: AnalyticsLogger?) { // Added
     }
 
     private fun processReceivedMessage(message: String) {
-        currentSharedState?.let { ss ->
-            currentDebugViewModel?.let { dvm ->
-                try {
-                    val json = JSONObject(message)
-                    val type = json.getString("type")
-                    val payload = json.opt("payload")
-                    val protoMajor = json.optInt("proto_major")
-                    val protoMinor = json.optInt("proto_minor")
+        val ss = currentSharedState ?: return
 
-                    when (type) {
-                        "checking_in_on_ya" -> {
-                            ss.serverProtoMajor = protoMajor
-                            ss.serverProtoMinor = protoMinor
-                        }
-                        "config" -> {
-                            if (payload != null) {
-                                ss.receivedJsonData = payload.toString()
-                            }
-                            ss.isJsonReceived = true
-                            println("Received config: $payload")
-                        }
-                        "debug" -> {
-                            if (payload is JSONObject) {
-                                payload.keys().forEach { key ->
-                                    val value = payload.optDouble(key, Double.NaN).toFloat()
-                                    if (!value.isNaN()) {
-                                        dvm.addDataPoint(key, value)
-                                    }
+        // 1. Handle plain text "ack" (common case for minimal overhead)
+        if (message.trim() == "ack") {
+            acksReceivedInWindow.incrementAndGet()
+            return
+        }
+
+        try {
+            val json = JSONObject(message)
+            val type = json.optString("type")
+            val payload = json.opt("payload")
+            val protoMajor = json.optInt("proto_major")
+            val protoMinor = json.optInt("proto_minor")
+
+            when (type) {
+                "checking_in_on_ya" -> {
+                    ss.serverProtoMajor = protoMajor
+                    ss.serverProtoMinor = protoMinor
+                }
+                "config" -> {
+                    if (payload != null) {
+                        ss.receivedJsonData = payload.toString()
+                    }
+                    ss.isJsonReceived = true
+                    println("Received config: $payload")
+                }
+                "debug" -> {
+                    currentDebugViewModel?.let { dvm ->
+                        if (payload is JSONObject) {
+                            payload.keys().forEach { key ->
+                                val value = payload.optDouble(key, Double.NaN).toFloat()
+                                if (!value.isNaN()) {
+                                    dvm.addDataPoint(key, value)
                                 }
                             }
                         }
-                        "ack" -> {
-                            acksReceivedInWindow.incrementAndGet()
-                        }
-                        else -> {
-                            println("Unknown type: $type, Payload: $payload")
-                        }
                     }
-                } catch (e: JSONException) {
-                    println("Failed to parse JSON: ${e.message} from message: $message")
+                }
+                "ack" -> {
+                    acksReceivedInWindow.incrementAndGet()
+                }
+                "" -> {
+                    println("Received JSON without type: $message")
+                }
+                else -> {
+                    println("Unknown type: $type, Payload: $payload")
                 }
             }
+        } catch (_: JSONException) {
+            // Log warning but don't crash, might be a non-JSON message we should handle differently
+            println("Non-JSON message received: $message")
         }
     }
 }
@@ -335,8 +347,6 @@ class SharedState {
 
     var activeConfig = mutableStateOf<LinkConfig?>(null)
 
-    var currentElements = mutableStateListOf<InterfaceData>()
-
     fun clear() {
         isConnected = false
         receivedMessages = emptyList()
@@ -346,5 +356,6 @@ class SharedState {
         packetLossPercentage = 0f
         persistentElements.clear()
         unsavedElementsUpdate.value = false
+        activeConfig.value = null
     }
 }
